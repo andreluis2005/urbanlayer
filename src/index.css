@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Sedgwick+Ave+Display&family=Permanent+Marker&family=Creepster&family=Rampart+One&family=Rubik+Beastly&family=Bangers&family=Chewy&family=Nosifer&family=Caveat+Brush&family=Press+Start+2P&family=Black+Ops+One&family=Eater&family=Frijole&family=Bungee+Shade&family=Rock+Salt&family=Mochiy+Pop+P+One&family=Anton&family=Special+Elite&family=Monoton&family=Finger+Paint&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-neon-orange: #FF6321;
+  --color-neon-green: #00FF00;
+  --color-neon-blue: #00F0FF;
+}
+
+body {
+  @apply bg-black text-white antialiased overflow-hidden;
+  font-family: var(--font-sans);
+}
+
+.graffiti-text {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: -0.05em;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

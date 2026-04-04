@@ -1,0 +1,7 @@
+{
+  "name": "Graffiti the World",
+  "description": "Explore the globe, find urban spots, and create realistic graffiti using AI.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
