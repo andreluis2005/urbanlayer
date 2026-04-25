@@ -7,6 +7,7 @@ import { generateGraffitiImage, saveGraffitiToWorld, processGraffitiMask, remove
 import { useWeb3 } from '../contexts/Web3Context';
 import { checkSpotOwnership, formatAddress, type MintResult } from '../services/Web3Service';
 import SpotPurchaseModal from './SpotPurchaseModal';
+import ViralExporterModal from './ViralExporterModal';
 import confetti from 'canvas-confetti';
 import { compositeWithCanvas } from './creator/compositeWithCanvas';
 import { type AdvancedParams, DEFAULT_ADV_PARAMS, STYLES, PORTRAIT_MODELS, EXPRESS_FONTS } from './creator/constants';
@@ -56,6 +57,7 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
 
   // --- Web3 / NFT States ---
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showViralModal, setShowViralModal] = useState(false);
   const [spotOwnership, setSpotOwnership] = useState<{ isClaimed: boolean; owner: string | null; tokenId: number | null }>({ isClaimed: false, owner: null, tokenId: null });
   const [mintResult, setMintResult] = useState<MintResult | null>(null);
   const [checkingOwnership, setCheckingOwnership] = useState(true);
@@ -847,6 +849,13 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
 
               <div className="space-y-3">
                 <button
+                  onClick={() => setShowViralModal(true)}
+                  className="w-full py-5 bg-gradient-to-r from-neon-orange to-purple-500 text-white rounded-2xl font-bold text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(255,99,33,0.3)] flex items-center justify-center gap-3"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Share Before & After
+                </button>
+                <button
                   onClick={() => {
                     setStep('input');
                   }}
@@ -865,6 +874,19 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
           )}
         </AnimatePresence>
       </div>
+
+      {/* Viral Exporter Modal */}
+      {resultImage && (
+        <ViralExporterModal
+          isOpen={showViralModal}
+          onClose={() => setShowViralModal(false)}
+          beforeImage={wallImage}
+          afterImage={resultImage}
+          lat={location.lat}
+          lng={location.lng}
+          locationName={location.name}
+        />
+      )}
     </div>
   );
 };
