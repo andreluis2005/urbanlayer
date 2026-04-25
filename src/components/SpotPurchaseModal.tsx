@@ -32,6 +32,9 @@ const SpotPurchaseModal: React.FC<SpotPurchaseModalProps> = ({
   const [step, setStep] = useState<ModalStep>('loading');
   const [tier, setTier] = useState<SpotTier>('bronze');
   const [poiCount, setPoiCount] = useState(0);
+  const [multiplier, setMultiplier] = useState(1);
+  const [calculatedPriceEth, setCalculatedPriceEth] = useState('0.0005');
+  const [calculatedPriceWei, setCalculatedPriceWei] = useState('500000000000000');
   const [mintResult, setMintResult] = useState<MintResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const network = getActiveNetwork();
@@ -46,9 +49,15 @@ const SpotPurchaseModal: React.FC<SpotPurchaseModalProps> = ({
     calculateSpotPrice(lat, lng).then((result) => {
       setTier(result.tier);
       setPoiCount(result.poiCount);
+      setMultiplier(result.multiplier);
+      setCalculatedPriceEth(result.calculatedPriceEth);
+      setCalculatedPriceWei(result.calculatedPriceWei);
       setStep('pricing');
     }).catch(() => {
       setTier('bronze');
+      setMultiplier(1);
+      setCalculatedPriceEth(SPOT_TIERS.bronze.price);
+      setCalculatedPriceWei(SPOT_TIERS.bronze.priceWei);
       setStep('pricing');
     });
   }, [isOpen, lat, lng]);
@@ -60,10 +69,9 @@ const SpotPurchaseModal: React.FC<SpotPurchaseModalProps> = ({
     }
 
     setStep('minting');
-    const tierInfo = SPOT_TIERS[tier];
     
     const result = await mintUrbanLayerNFT(
-      lat, lng, locationName, tier, tierInfo.priceWei
+      lat, lng, locationName, tier, calculatedPriceWei
     );
 
     if (result.success) {
@@ -153,14 +161,14 @@ const SpotPurchaseModal: React.FC<SpotPurchaseModalProps> = ({
                     <div className="text-xs font-bold uppercase tracking-widest" style={{ color: tierInfo.color }}>
                       {tierInfo.name} Tier
                     </div>
-                    <div className="text-[10px] text-gray-400 mt-1">{poiCount} POIs detected • {tierInfo.multiplier}</div>
+                    <div className="text-[10px] text-gray-400 mt-1">{poiCount} POIs detected • {multiplier}x multiplier</div>
                   </div>
                 </div>
 
                 {/* Preço */}
                 <div className="text-center space-y-1">
                   <p className="text-3xl font-bold tracking-tight">
-                    {tierInfo.price} <span className="text-lg text-gray-400">ETH</span>
+                    {calculatedPriceEth} <span className="text-lg text-gray-400">ETH</span>
                   </p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest">
                     on {network.name} {network.isTestnet && '(Testnet)'}
@@ -210,7 +218,7 @@ const SpotPurchaseModal: React.FC<SpotPurchaseModalProps> = ({
                     className="w-full py-4 bg-gradient-to-r from-neon-green to-emerald-500 text-black rounded-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,255,0,0.2)]"
                   >
                     <Sparkles className="w-4 h-4" />
-                    Buy & Mint NFT — {tierInfo.price} ETH
+                    Buy & Mint NFT — {calculatedPriceEth} ETH
                   </motion.button>
                 )}
 

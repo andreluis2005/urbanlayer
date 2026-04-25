@@ -80,53 +80,73 @@ export function getOpenSeaUrl(contractAddress: string, tokenId: number): string 
 }
 
 /**
- * Tiers de preço para spots
+ * Tiers de preço para spots — MODELO B: Preço Adaptativo
+ * 
+ * FÓRMULA: preço_final = preço_base × multiplicador_local × fator_escassez
+ * 
+ * O multiplicador_local é calculado pelo PricingEngine baseado no weightedScore
+ * dos POIs (Overpass API). Quanto mais turístico e famoso, maior o multiplicador.
+ * 
+ * ESTRATÉGIA "Spray Can Economics":
+ * - Bronze BARATO (~$0.90) para atrair massa de usuários
+ * - Receita da geração de arte por IA subsidia o Bronze barato
+ * - Tiers superiores geram lucro puro por escassez e prestígio
+ * 
+ * REFERÊNCIA COMPETITIVA:
+ * - OVR: ~$0.50-5 (entrada) → $50K+ (premium)
+ * - Upland: ~$5-50 (cidades novas) → $500K+ (NYC, SF)
+ * - SuperWorld: ~$0.10 (áreas vazias) → $100K+ (landmarks)
  */
 export const SPOT_TIERS = {
   bronze: {
     name: 'Bronze',
     emoji: '🥉',
-    price: '0.0003', // ETH
-    priceWei: '300000000000000', // 0.0003 ETH em wei
-    multiplier: '1x',
+    price: '0.0005',   // ETH (~$0.90 @ $1800/ETH)
+    priceWei: '500000000000000',   // 0.0005 ETH em wei
+    multiplierMin: 1,
+    multiplierMax: 3,
     color: '#CD7F32',
-    description: 'Entrada massiva — áreas rurais e suburbanas',
+    description: 'Spray barato — becos, ruas residenciais, áreas rurais',
   },
   silver: {
     name: 'Silver',
     emoji: '🥈',
-    price: '0.0008',
-    priceWei: '800000000000000',
-    multiplier: '~3x',
+    price: '0.05',     // ETH (~$90)
+    priceWei: '50000000000000000',  // 0.05 ETH em wei
+    multiplierMin: 1,
+    multiplierMax: 5,
     color: '#C0C0C0',
-    description: 'Uso comum — cidades médias e ruas comerciais',
+    description: 'Ruas comerciais — cidades médias, centros urbanos',
   },
   gold: {
     name: 'Gold',
     emoji: '🥇',
-    price: '0.003',
-    priceWei: '3000000000000000',
-    multiplier: '10x',
+    price: '0.5',      // ETH (~$900)
+    priceWei: '500000000000000000', // 0.5 ETH em wei
+    multiplierMin: 1,
+    multiplierMax: 10,
     color: '#FFD700',
-    description: 'Locais relevantes — centros de metrópoles',
+    description: 'Metrópoles — Av. Paulista, Shibuya, Copacabana',
   },
   diamond: {
     name: 'Diamond',
     emoji: '💎',
-    price: '0.01',
-    priceWei: '10000000000000000',
-    multiplier: '~30x',
+    price: '5.0',      // ETH (~$9.000)
+    priceWei: '5000000000000000000', // 5.0 ETH em wei
+    multiplierMin: 1,
+    multiplierMax: 20,
     color: '#B9F2FF',
-    description: 'Pontos turísticos — alta demanda',
+    description: 'Pontos icônicos — Cristo Redentor, Golden Gate, Hollywood',
   },
   legendary: {
     name: 'Legendary',
     emoji: '👑',
-    price: '0.05',
-    priceWei: '50000000000000000',
-    multiplier: '150x+',
+    price: '50.0',     // ETH (~$90.000)
+    priceWei: '50000000000000000000', // 50.0 ETH em wei
+    multiplierMin: 1,
+    multiplierMax: 100,
     color: '#FF6321',
-    description: 'Locais icônicos — escassez e prestígio',
+    description: 'Lendário — Times Square, Torre Eiffel, Coliseu',
   },
 } as const;
 

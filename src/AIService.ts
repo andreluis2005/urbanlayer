@@ -42,9 +42,12 @@ export async function checkStreetViewCoverage(lat: number, lng: number): Promise
     
     if (data.status === 'OK') {
       return true;
+    } else if (data.status === 'ZERO_RESULTS') {
+      console.warn("ℹ️ Sem cobertura de Street View para estas coordenadas.");
+      return false;
     } else {
-      // Registrar erro específico mas retornar false para que o componente trate aspas/billing
-      console.warn("⚠️ Google Street View Coverage/Auth Error:", data.status, data.error_message || "Sem mensagem de erro.");
+      // Registrar erro específico (ex: REQUEST_DENIED, OVER_QUERY_LIMIT)
+      console.error("❌ Erro na Google Street View Metadata API:", data.status, data.error_message || "");
       return false;
     }
   } catch (error) {

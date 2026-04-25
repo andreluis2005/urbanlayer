@@ -1,24 +1,30 @@
 /**
- * PricingEngine v2 — Cálculo inteligente de preço por localização
+ * PricingEngine v3 — Preço Adaptativo com Multiplicador Dinâmico
  * 
- * PROBLEMA RESOLVIDO: v1 usava contagem bruta de POIs num raio de 500m.
- * Em cidades densas como São Paulo, qualquer rua residencial tem dezenas
- * de estabelecimentos (restaurantes, lojas, bares), gerando tier Gold (0.003 ETH)
- * para ruas que deveriam ser Bronze (0.0003 ETH).
+ * MODELO B: "Spray Can Economics"
+ * preço_final = preço_base_tier × multiplicador_local × fator_escassez
  * 
- * SOLUÇÃO v2: Sistema de pontuação ponderada
- * - POIs comuns (lojas, restaurantes) = 1 ponto cada
- * - POIs culturais (museus, galerias, teatros) = 5 pontos cada  
- * - POIs turísticos (tourism, historic) = 10 pontos cada
- * - Raio reduzido para 250m (mais preciso)
- * - Thresholds muito mais altos para cidades densas
+ * O multiplicador_local é calculado a partir do weightedScore dos POIs:
+ * - Dentro do range [min, max] de cada tier
+ * - Quanto mais turístico/cultural o local, maior o multiplicador
  * 
- * LIÇÃO APRENDIDA: São Paulo residencial ≠ ponto turístico
+ * ESTRATÉGIA:
+ * - Bronze barato (~$0.90) para atrair massa de usuários
+ * - A receita da geração IA subsidia o preço baixo do Bronze
+ * - Tiers superiores refletem valor real de marketing dos locais
+ * 
+ * THRESHOLDS CALIBRADOS POR DADOS REAIS (Overpass API):
+ * - Rua residencial SP: score ~10 → BRONZE (0.0005 ETH × 1x = $0.90)
+ * - Centro comercial metrópole: score ~29 → SILVER (0.05 ETH × 1x = $90)
+ * - Zona turística: score ~80 → GOLD (0.5 ETH × 1x = $900)
+ * - Ponto turístico famoso: score ~205 → DIAMOND (5.0 ETH × 1x = $9K)
+ * - Times Square (landmark): → LEGENDARY (50.0 ETH × max = $9M)
  */
 
 import { SpotTier, SPOT_TIERS } from './InkNetworkConfig';
+import { parseEther } from 'ethers';
 
-interface PricingResult {
+export interface PricingResult {
   tier: SpotTier;
   tierInfo: typeof SPOT_TIERS[SpotTier];
   poiCount: number;
@@ -26,6 +32,12 @@ interface PricingResult {
   locationCategory: string;
   isLandmark: boolean;
   debug: string;
+  /** Multiplicador dinâmico aplicado (1x–Nx baseado no score dentro do tier) */
+  multiplier: number;
+  /** Preço final calculado em ETH (base × multiplicador) */
+  calculatedPriceEth: string;
+  /** Preço final calculado em Wei (para smart contract) */
+  calculatedPriceWei: string;
 }
 
 // Cache para evitar chamadas duplicadas (session-level)
@@ -39,44 +51,49 @@ function getCacheKey(lat: number, lng: number): string {
 /**
  * Landmarks icônicos mundiais — Legendary/Diamond tier garantido
  * Raio reduzido para ser preciso (0.001 ≈ 111m)
+ * 
+ * PREÇOS (Modelo B):
+ * - Legendary: 50.0 ETH base (~$90K) × multiplicador até 100x = até $9M
+ * - Diamond: 5.0 ETH base (~$9K) × multiplicador até 20x = até $180K
+ * - Gold: 0.5 ETH base (~$900) × multiplicador até 10x = até $9K
  */
-const ICONIC_LANDMARKS: Array<{ lat: number; lng: number; radius: number; name: string; tier: SpotTier }> = [
-  // === LEGENDARY (0.05+ ETH) — Top 10 landmarks ===
-  { lat: 40.7580, lng: -73.9855, radius: 0.0015, name: 'Times Square', tier: 'legendary' },
-  { lat: 48.8584, lng: 2.2945, radius: 0.001, name: 'Tour Eiffel', tier: 'legendary' },
-  { lat: 52.5163, lng: 13.3777, radius: 0.002, name: 'Brandenburg Gate', tier: 'legendary' },
-  { lat: 41.8902, lng: 12.4922, radius: 0.001, name: 'Colosseum', tier: 'legendary' },
-  { lat: 51.5014, lng: -0.1419, radius: 0.001, name: 'Big Ben', tier: 'legendary' },
-  { lat: 40.6892, lng: -74.0445, radius: 0.001, name: 'Statue of Liberty', tier: 'legendary' },
-  { lat: 27.1751, lng: 78.0421, radius: 0.001, name: 'Taj Mahal', tier: 'legendary' },
-  { lat: -33.8568, lng: 151.2153, radius: 0.001, name: 'Sydney Opera House', tier: 'legendary' },
-  { lat: 48.8606, lng: 2.3376, radius: 0.001, name: 'Louvre', tier: 'legendary' },
-  { lat: 41.4036, lng: 2.1744, radius: 0.001, name: 'Sagrada Família', tier: 'legendary' },
+const ICONIC_LANDMARKS: Array<{ lat: number; lng: number; radius: number; name: string; tier: SpotTier; fameMultiplier: number }> = [
+  // === LEGENDARY (50+ ETH) — Top 10 landmarks, multiplicador alto ===
+  { lat: 40.7580, lng: -73.9855, radius: 0.0015, name: 'Times Square', tier: 'legendary', fameMultiplier: 80 },
+  { lat: 48.8584, lng: 2.2945, radius: 0.001, name: 'Tour Eiffel', tier: 'legendary', fameMultiplier: 90 },
+  { lat: 52.5163, lng: 13.3777, radius: 0.002, name: 'Brandenburg Gate', tier: 'legendary', fameMultiplier: 40 },
+  { lat: 41.8902, lng: 12.4922, radius: 0.001, name: 'Colosseum', tier: 'legendary', fameMultiplier: 70 },
+  { lat: 51.5014, lng: -0.1419, radius: 0.001, name: 'Big Ben', tier: 'legendary', fameMultiplier: 60 },
+  { lat: 40.6892, lng: -74.0445, radius: 0.001, name: 'Statue of Liberty', tier: 'legendary', fameMultiplier: 75 },
+  { lat: 27.1751, lng: 78.0421, radius: 0.001, name: 'Taj Mahal', tier: 'legendary', fameMultiplier: 85 },
+  { lat: -33.8568, lng: 151.2153, radius: 0.001, name: 'Sydney Opera House', tier: 'legendary', fameMultiplier: 50 },
+  { lat: 48.8606, lng: 2.3376, radius: 0.001, name: 'Louvre', tier: 'legendary', fameMultiplier: 65 },
+  { lat: 41.4036, lng: 2.1744, radius: 0.001, name: 'Sagrada Família', tier: 'legendary', fameMultiplier: 55 },
 
-  // === DIAMOND (0.01 ETH) — Locais muito famosos ===
-  { lat: -22.9519, lng: -43.2105, radius: 0.001, name: 'Cristo Redentor', tier: 'diamond' },
-  { lat: 35.6762, lng: 139.6503, radius: 0.002, name: 'Shibuya Crossing', tier: 'diamond' },
-  { lat: 37.8199, lng: -122.4783, radius: 0.001, name: 'Golden Gate Bridge', tier: 'diamond' },
-  { lat: 34.0522, lng: -118.2437, radius: 0.002, name: 'Hollywood Sign Area', tier: 'diamond' },
+  // === DIAMOND (5+ ETH) — Locais muito famosos ===
+  { lat: -22.9519, lng: -43.2105, radius: 0.001, name: 'Cristo Redentor', tier: 'diamond', fameMultiplier: 15 },
+  { lat: 35.6762, lng: 139.6503, radius: 0.002, name: 'Shibuya Crossing', tier: 'diamond', fameMultiplier: 12 },
+  { lat: 37.8199, lng: -122.4783, radius: 0.001, name: 'Golden Gate Bridge', tier: 'diamond', fameMultiplier: 14 },
+  { lat: 34.0522, lng: -118.2437, radius: 0.002, name: 'Hollywood Sign Area', tier: 'diamond', fameMultiplier: 10 },
 
-  // === GOLD (0.003 ETH) — Avenidas/zonas famosas em cidades grandes ===
-  { lat: -23.5613, lng: -46.6560, radius: 0.001, name: 'Av. Paulista (MASP)', tier: 'gold' },
-  { lat: -22.9068, lng: -43.1729, radius: 0.001, name: 'Copacabana', tier: 'gold' },
+  // === GOLD (0.5+ ETH) — Avenidas/zonas famosas em cidades grandes ===
+  { lat: -23.5613, lng: -46.6560, radius: 0.001, name: 'Av. Paulista (MASP)', tier: 'gold', fameMultiplier: 5 },
+  { lat: -22.9068, lng: -43.1729, radius: 0.001, name: 'Copacabana', tier: 'gold', fameMultiplier: 7 },
 ];
 
 /**
  * Verifica se as coordenadas estão próximas de um landmark conhecido
  */
-function checkKnownLandmark(lat: number, lng: number): { isLandmark: boolean; name: string; tier: SpotTier } {
+function checkKnownLandmark(lat: number, lng: number): { isLandmark: boolean; name: string; tier: SpotTier; fameMultiplier: number } {
   for (const landmark of ICONIC_LANDMARKS) {
     const dist = Math.sqrt(
       Math.pow(lat - landmark.lat, 2) + Math.pow(lng - landmark.lng, 2)
     );
     if (dist <= landmark.radius) {
-      return { isLandmark: true, name: landmark.name, tier: landmark.tier };
+      return { isLandmark: true, name: landmark.name, tier: landmark.tier, fameMultiplier: landmark.fameMultiplier };
     }
   }
-  return { isLandmark: false, name: '', tier: 'bronze' };
+  return { isLandmark: false, name: '', tier: 'bronze', fameMultiplier: 1 };
 }
 
 /**
@@ -193,13 +210,12 @@ async function getLocationInfo(lat: number, lng: number): Promise<{ category: st
 /**
  * Classifica o tier baseado no score ponderado
  * 
- * THRESHOLDS CALIBRADOS:
- * - Rua residencial em SP (0 tourist, 0 cultural, ~20 common) → score 10 → BRONZE ✅
- * - Rua comercial em cidade média (0 tourist, 1 cultural, ~15 common) → score 10.5 → BRONZE ✅  
- * - Centro comercial de metrópole (1 tourist, 3 cultural, ~40 common) → score 29 → SILVER ✅
- * - Zona turística (5 tourist, 5 cultural, ~30 common) → score 80 → GOLD ✅
- * - Ponto turístico famoso (15+ tourist, 10 cultural, ~50 common) → score 205 → DIAMOND ✅
- * - Times Square (50+ tourist...) → Landmark → LEGENDARY ✅
+ * THRESHOLDS CALIBRADOS (v3 — Modelo B):
+ * - Rua residencial em SP (score ~10) → BRONZE: 0.0005 ETH (~$0.90)
+ * - Centro comercial metrópole (score ~29) → SILVER: 0.05 ETH (~$90)
+ * - Zona turística (score ~80) → GOLD: 0.5 ETH (~$900)
+ * - Ponto turístico famoso (score ~205) → DIAMOND: 5.0 ETH (~$9K)
+ * - Landmark (fora da escala) → LEGENDARY: 50.0 ETH (~$90K)
  */
 function classifyTier(weightedScore: number, landmark: { isLandmark: boolean; tier: SpotTier }): SpotTier {
   // Landmarks pré-definidos têm prioridade absoluta
@@ -214,7 +230,62 @@ function classifyTier(weightedScore: number, landmark: { isLandmark: boolean; ti
 }
 
 /**
- * FUNÇÃO PRINCIPAL: Calcula o tier de preço para um local
+ * Calcula o multiplicador dinâmico dentro do range do tier.
+ * 
+ * O weightedScore determina "quão bom" é o spot DENTRO do seu tier.
+ * Um Bronze numa rua movimentada de Manhattan será mais caro que
+ * um Bronze num beco rural, mesmo ambos sendo tier Bronze.
+ * 
+ * FÓRMULA: multiplier = min + (score_normalized × (max - min))
+ * - score_normalized = posição do score dentro dos thresholds do tier (0.0 → 1.0)
+ */
+function calculateMultiplier(tier: SpotTier, weightedScore: number, landmark: { isLandmark: boolean; fameMultiplier: number }): number {
+  const tierInfo = SPOT_TIERS[tier];
+
+  // Landmarks usam seu fameMultiplier pré-definido
+  if (landmark.isLandmark) {
+    // Garante que está dentro do range do tier
+    return Math.max(tierInfo.multiplierMin, Math.min(landmark.fameMultiplier, tierInfo.multiplierMax));
+  }
+
+  // Ranges de score para cada tier (baseados nos thresholds de classifyTier)
+  const tierScoreRanges: Record<SpotTier, { low: number; high: number }> = {
+    bronze:    { low: 0, high: 15 },
+    silver:    { low: 15, high: 30 },
+    gold:      { low: 30, high: 80 },
+    diamond:   { low: 80, high: 200 },
+    legendary: { low: 200, high: 500 },
+  };
+
+  const range = tierScoreRanges[tier];
+  // Normaliza o score dentro do range do tier (0.0 → 1.0)
+  const normalized = Math.max(0, Math.min(1, (weightedScore - range.low) / (range.high - range.low)));
+
+  // Interpola o multiplicador entre min e max do tier
+  const multiplier = tierInfo.multiplierMin + (normalized * (tierInfo.multiplierMax - tierInfo.multiplierMin));
+
+  // Arredonda para 1 casa decimal para clareza
+  return Math.round(multiplier * 10) / 10;
+}
+
+/**
+ * Calcula o preço final em ETH e Wei com base no tier e multiplicador
+ */
+function calculateFinalPrice(tier: SpotTier, multiplier: number): { priceEth: string; priceWei: string } {
+  const basePrice = parseFloat(SPOT_TIERS[tier].price);
+  const finalPrice = basePrice * multiplier;
+
+  // Formatar ETH com precisão suficiente (evitar arredondamento destrutivo)
+  const priceEth = finalPrice.toFixed(finalPrice < 0.01 ? 6 : finalPrice < 1 ? 4 : 2);
+
+  // Converter para Wei usando parseEther do ethers.js
+  const priceWei = parseEther(priceEth).toString();
+
+  return { priceEth, priceWei };
+}
+
+/**
+ * FUNÇÃO PRINCIPAL: Calcula o tier e preço adaptativo para um local
  */
 export async function calculateSpotPrice(lat: number, lng: number): Promise<PricingResult> {
   const cacheKey = getCacheKey(lat, lng);
@@ -222,7 +293,7 @@ export async function calculateSpotPrice(lat: number, lng: number): Promise<Pric
   // Verificar cache
   const cached = pricingCache.get(cacheKey);
   if (cached) {
-    console.log('💰 Pricing cache hit:', cacheKey, '→', cached.tier);
+    console.log('💰 Pricing cache hit:', cacheKey, '→', cached.tier, `${cached.multiplier}x`);
     return cached;
   }
 
@@ -253,6 +324,12 @@ export async function calculateSpotPrice(lat: number, lng: number): Promise<Pric
   // 4. Classificar tier
   const tier = classifyTier(weightedScore, landmarkCheck);
 
+  // 5. Calcular multiplicador dinâmico
+  const multiplier = calculateMultiplier(tier, weightedScore, landmarkCheck);
+
+  // 6. Calcular preço final
+  const { priceEth, priceWei } = calculateFinalPrice(tier, multiplier);
+
   const result: PricingResult = {
     tier,
     tierInfo: SPOT_TIERS[tier],
@@ -261,25 +338,29 @@ export async function calculateSpotPrice(lat: number, lng: number): Promise<Pric
     locationCategory: locationInfo.category,
     isLandmark: landmarkCheck.isLandmark,
     debug: debugInfo,
+    multiplier,
+    calculatedPriceEth: priceEth,
+    calculatedPriceWei: priceWei,
   };
 
   // Cachear
   pricingCache.set(cacheKey, result);
-  console.log(`💰 Tier: ${SPOT_TIERS[tier].emoji} ${tier.toUpperCase()} — ${SPOT_TIERS[tier].price} ETH (${debugInfo})`);
+  console.log(`💰 Tier: ${SPOT_TIERS[tier].emoji} ${tier.toUpperCase()} — ${priceEth} ETH (${multiplier}x) (${debugInfo})`);
 
   return result;
 }
 
 /**
- * Retorna o preço em ETH para um tier específico
+ * Retorna o preço BASE em ETH para um tier específico (sem multiplicador)
  */
 export function getTierPrice(tier: SpotTier): string {
   return SPOT_TIERS[tier].price;
 }
 
 /**
- * Retorna o preço em Wei para um tier específico
+ * Retorna o preço BASE em Wei para um tier específico (sem multiplicador)
  */
 export function getTierPriceWei(tier: SpotTier): string {
   return SPOT_TIERS[tier].priceWei;
 }
+

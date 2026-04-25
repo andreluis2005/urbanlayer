@@ -142,9 +142,15 @@ export async function connectWallet(): Promise<WalletState> {
       networkName: activeNetwork.name,
     };
 
-    // Registrar listeners para mudanças
-    ethereum.on('accountsChanged', handleAccountsChanged);
-    ethereum.on('chainChanged', handleChainChanged);
+    // Registrar listeners para mudanças de forma segura
+    try {
+      if (ethereum.on) {
+        ethereum.on('accountsChanged', handleAccountsChanged);
+        ethereum.on('chainChanged', handleChainChanged);
+      }
+    } catch (e) {
+      console.warn("⚠️ Não foi possível registrar listeners da wallet (conflito de provedor).");
+    }
 
     console.log('🔗 Wallet conectada:', address);
     console.log('💰 Balanço:', formatEther(balance), 'ETH');

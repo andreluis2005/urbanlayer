@@ -40,27 +40,32 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
         throw new Error("No Coverage");
       }
 
-      // 3. Carregar Google Maps JS API interativo (Injeção Nativa à prova de cache)
+      // 3. Carregar Google Maps JS API de forma moderna e resiliente
       const loadMapsApi = () => {
         return new Promise<void>((resolve, reject) => {
-          // Se já carregou via HMR
-          if (window.google && window.google.maps && window.google.maps.StreetViewPanorama) {
+          // Se já carregou via HMR ou navegação anterior
+          if (window.google && window.google.maps) {
             resolve();
             return;
           }
           
           const scriptId = 'google-maps-script';
-          let script = document.getElementById(scriptId) as HTMLScriptElement;
-          
-          if (script) {
-            script.addEventListener('load', () => resolve());
-            script.addEventListener('error', (e) => reject(e));
+          if (document.getElementById(scriptId)) {
+            // Script já está no head, aguardar carregar se necessário
+            const existingScript = document.getElementById(scriptId) as HTMLScriptElement;
+            if (window.google && window.google.maps) {
+              resolve();
+            } else {
+              existingScript.addEventListener('load', () => resolve());
+              existingScript.addEventListener('error', (e) => reject(e));
+            }
             return;
           }
 
-          script = document.createElement('script');
+          const script = document.createElement('script');
           script.id = scriptId;
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&loading=async`;
+          // Padrão moderno: Injeta o global mas usamos importLibrary para os módulos
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&v=beta`; 
           script.async = true;
           script.defer = true;
           script.onload = () => resolve();
@@ -70,24 +75,30 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
       };
 
       await loadMapsApi();
-      const StreetViewPanorama = window.google.maps.StreetViewPanorama;
+      
+      // Novo padrão Google Maps: importar bibliotecas sob demanda
+      // Isso evita o erro "is not a constructor" em produção
+      const { StreetViewPanorama } = await google.maps.importLibrary("streetView") as google.maps.StreetViewLibrary;
 
       if (mapRef.current) {
+        // Limpeza de segurança: evitar duplicidade de elementos no DOM do React
+        mapRef.current.innerHTML = '';
+        
         const panorama = new StreetViewPanorama(mapRef.current, {
           position: { lat: location.lat, lng: location.lng },
           pov: { heading: 0, pitch: 0 },
           zoom: 1,
           showRoadLabels: false,
-          disableDefaultUI: true, // Clean interface
+          disableDefaultUI: true,
           clickToGo: true,
           panControl: true,
-          linksControl: true, // Allow walking
+          linksControl: true,
           enableCloseButton: false,
         });
 
         panoramaRef.current = panorama;
 
-        // Listener: Update position when walking
+        // Listener: Atualizar posição ao caminhar
         panorama.addListener("position_changed", () => {
           const pos = panorama.getPosition();
           if (pos) {
@@ -96,7 +107,7 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
           }
         });
 
-        // Listener: Update POV when looking around
+        // Listener: Atualizar POV ao olhar em volta
         panorama.addListener("pov_changed", () => {
           const pov = panorama.getPov();
           setCurrentHeading(pov.heading);
