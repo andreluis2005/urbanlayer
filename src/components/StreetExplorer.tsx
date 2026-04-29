@@ -224,39 +224,45 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
   const MAX_VISIBLE_DISTANCE = 50;
   const isArtVisible = artDistance <= MAX_VISIBLE_DISTANCE;
 
-  // Calcular posição horizontal na tela baseado no FOV da câmera
-  const FOV = 90; // Campo de visão do Street View em graus
+  // --- Projeção esférica: Posicionar grafite com base no heading salvo ---
+  // Se o grafite tem heading/pitch salvos, usa-os como âncora fixa.
+  // Caso contrário (legado), calcula via bearing geográfico.
+  const FOV = 90;
   const halfFov = FOV / 2;
 
-  let artScreenX = 50; // centro (%)
-  let artScreenY = 50; // centro (%)
+  let artScreenX = 50;
+  let artScreenY = 50;
   let isInFieldOfView = false;
 
   if (activeArt && isArtVisible) {
-    if (artDistance < 10) {
-      // Muito perto → bearing é impreciso, mostrar no centro da tela
-      isInFieldOfView = true;
-      artScreenX = 50;
-      artScreenY = 50;
-    } else {
-      // Longe o suficiente → usar bearing para projetar na tela
-      const bearing = getBearing(currentLat, currentLng, activeArt.lat, activeArt.lng);
-      let deltaHeading = bearing - currentHeading;
-      if (deltaHeading > 180) deltaHeading -= 360;
-      if (deltaHeading < -180) deltaHeading += 360;
+    // Determinar o heading-alvo: usar o heading salvo se existir, senão bearing geográfico
+    const artHeading = activeArt.heading != null
+      ? activeArt.heading
+      : getBearing(currentLat, currentLng, activeArt.lat, activeArt.lng);
 
-      isInFieldOfView = Math.abs(deltaHeading) < halfFov;
+    const artPitch = activeArt.pitch != null
+      ? activeArt.pitch
+      : 0;
 
-      artScreenX = 50 + (deltaHeading / halfFov) * 50;
-      artScreenX = Math.max(-20, Math.min(120, artScreenX));
+    // Delta entre a câmera e o ponto fixo do grafite
+    let deltaHeading = artHeading - currentHeading;
+    if (deltaHeading > 180) deltaHeading -= 360;
+    if (deltaHeading < -180) deltaHeading += 360;
 
-      artScreenY = 50 - (currentPitch / halfFov) * 30;
-      artScreenY = Math.max(10, Math.min(90, artScreenY));
-    }
+    let deltaPitch = artPitch - currentPitch;
+
+    isInFieldOfView = Math.abs(deltaHeading) < halfFov && Math.abs(deltaPitch) < halfFov;
+
+    // Projeção esférica → posição na tela (%)
+    artScreenX = 50 + (deltaHeading / halfFov) * 50;
+    artScreenX = Math.max(-30, Math.min(130, artScreenX));
+
+    artScreenY = 50 - (deltaPitch / halfFov) * 50;
+    artScreenY = Math.max(-10, Math.min(110, artScreenY));
   }
 
-  // Escala baseada na distância
-  const artScale = isArtVisible ? Math.max(0.2, 1 - (artDistance / MAX_VISIBLE_DISTANCE) * 0.8) : 0;
+  // Escala: projeção perspectiva (1/distância) em vez de linear
+  const artScale = isArtVisible ? Math.max(0.15, Math.min(1.2, 8 / Math.max(artDistance, 3))) : 0;
   const artOpacity = isArtVisible ? Math.max(0.1, 0.95 - (artDistance / MAX_VISIBLE_DISTANCE) * 0.85) : 0;
 
   const handleSprayHere = () => {
@@ -360,7 +366,7 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
                 transition={{ duration: 0.15 }}
                 className="absolute inset-0 z-40 pointer-events-none overflow-hidden"
               >
-                {/* O Grafite — posicionado com base no bearing real */}
+                {/* O Grafite — fixo no muro via heading/pitch */}
                 <img
                   src={activeArt.graffiti_url}
                   alt={activeArt.title || 'Graffiti AR'}
@@ -372,7 +378,7 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
                     maxWidth: '50%',
                     maxHeight: '45%',
                     mixBlendMode: 'screen',
-                    transition: 'left 0.08s linear, top 0.08s linear, transform 0.2s ease-out',
+                    // Sem transition → posicionamento instantâneo = fixo no muro
                   }}
                 />
 
