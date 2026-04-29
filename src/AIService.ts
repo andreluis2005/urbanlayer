@@ -86,18 +86,21 @@ export async function checkExistingGraffiti(lat: number, lng: number) {
  * Isso é essencial para que a IA (Replicate) receba um link limpo e não um Base64 corrompido.
  */
 export async function uploadToSupabase(file: Blob, bucketName: string = 'graffitis'): Promise<string> {
-  const fileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+  // Detectar tipo: PNG (transparente) ou JPEG
+  const isPng = file.type === 'image/png';
+  const ext = isPng ? 'png' : 'jpg';
+  const contentType = isPng ? 'image/png' : 'image/jpeg';
+  const fileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
   
   const { error } = await supabase.storage
     .from(bucketName)
     .upload(fileName, file, {
-      contentType: 'image/jpeg',
+      contentType,
       upsert: true
     });
 
   if (error) {
     console.error("Error uploading to Supabase Storage:", error);
-    // Tentar bucket alternativo se o principal falhar (caso o user não tenha criado)
     throw new Error(`Falha no upload para o Storage: ${error.message}. Certifique-se de que o bucket '${bucketName}' existe e é público.`);
   }
 

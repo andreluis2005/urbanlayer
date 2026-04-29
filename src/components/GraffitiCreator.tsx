@@ -274,21 +274,25 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
     if (graffitiOverlay || resultImage) {
       setIsSaving(true);
       try {
-        let savedImageUrl = resultImage;
+        let savedImageUrl: string | null = null;
         let isolatedGraffitiUrl: string | undefined;
 
-        if (graffitiOverlay && !resultImage) {
-          // --- NOVO: Upload do grafite isolado (PNG transparente) para o Storage ---
+        // --- 1. Upload do grafite isolado (PNG transparente) para o Storage ---
+        if (graffitiOverlay) {
           try {
             const response = await fetch(graffitiOverlay);
             const blob = await response.blob();
-            isolatedGraffitiUrl = await uploadToSupabase(blob, 'graffitis');
-            console.log('✅ Grafite isolado salvo no Storage:', isolatedGraffitiUrl);
+            // Garantir que é PNG para preservar transparência
+            const pngBlob = blob.type === 'image/png' ? blob : new Blob([blob], { type: 'image/png' });
+            isolatedGraffitiUrl = await uploadToSupabase(pngBlob, 'graffitis');
+            console.log('✅ Grafite isolado (PNG transparente) salvo no Storage:', isolatedGraffitiUrl);
           } catch (uploadErr) {
             console.warn('⚠️ Falha ao salvar grafite isolado, continuando sem ele:', uploadErr);
           }
+        }
 
-          // Todas as artes devem ser opacas sobre o muro ('source-over').
+        // --- 2. Compositar grafite sobre o muro (imagem final) ---
+        if (graffitiOverlay) {
           const blendMode: 'multiply' | 'source-over' = 'source-over';
           const applyMask = false;
 
@@ -299,9 +303,23 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
           }, blendMode, applyMask);
           setResultImage(finalCompositedCanvas);
           savedImageUrl = finalCompositedCanvas;
+        } else if (resultImage) {
+          savedImageUrl = resultImage;
         }
 
-        // Persistir no banco de dados (ambas URLs)
+        // --- 3. Upload da imagem composta para o Storage (não salvar base64 no banco!) ---
+        if (savedImageUrl && savedImageUrl.startsWith('data:')) {
+          try {
+            const response = await fetch(savedImageUrl);
+            const blob = await response.blob();
+            savedImageUrl = await uploadToSupabase(blob, 'graffitis');
+            console.log('✅ Imagem composta salva no Storage:', savedImageUrl);
+          } catch (uploadErr) {
+            console.warn('⚠️ Falha ao fazer upload da imagem composta, salvando base64:', uploadErr);
+          }
+        }
+
+        // --- 4. Persistir no banco de dados (URLs do Storage, não base64) ---
         if (savedImageUrl) {
           await saveGraffitiToWorld({
             lat: location.lat,
