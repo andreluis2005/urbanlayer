@@ -357,7 +357,8 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
         {activeArt && hudVisible && !isSearching && (
           <>
             {/* MODO AR: Grafite sobreposto ao Street View — como na vida real */}
-            {isArtVisible && isInFieldOfView ? (
+            {/* Só exibe overlay AR se tiver graffiti_url (imagem com fundo transparente) */}
+            {activeArt.graffiti_url && isArtVisible && isInFieldOfView ? (
               <motion.div
                 key={`ar-${activeArt.id}`}
                 initial={{ opacity: 0 }}
@@ -366,10 +367,9 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
                 transition={{ duration: 0.15 }}
                 className="absolute inset-0 z-40 pointer-events-none overflow-hidden"
               >
-                {/* O Grafite — fixo no muro via heading/pitch */}
-                {/* Usa graffiti_url (transparente) se disponível, senão image_url */}
+                {/* O Grafite transparente — fixo no muro via heading/pitch */}
                 <img
-                  src={activeArt.graffiti_url || activeArt.image_url}
+                  src={activeArt.graffiti_url}
                   alt={activeArt.title || 'Graffiti AR'}
                   className="absolute object-contain"
                   style={{
@@ -378,14 +378,9 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
                     transform: `translate(-50%, -50%) scale(${artScale})`,
                     maxWidth: '50%',
                     maxHeight: '45%',
-                    // PNG transparente: usar blend normal para preservar cores reais
-                    // Adicionar sombra sutil para "colar" no muro
-                    filter: activeArt.graffiti_url 
-                      ? 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))' 
-                      : 'drop-shadow(0 4px 12px rgba(0,0,0,0.6))',
-                    // graffiti_url já é transparente → blend normal
-                    // image_url tem fundo → blend multiply para integrar com o muro
-                    mixBlendMode: activeArt.graffiti_url ? 'normal' : 'multiply',
+                    // PNG transparente: blend normal preserva cores + sombra cola no muro
+                    mixBlendMode: 'normal',
+                    filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))',
                   }}
                 />
 
@@ -435,7 +430,7 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
                   </button>
                 </div>
               </motion.div>
-            ) : !isArtVisible || !isInFieldOfView ? (
+            ) : activeArt.graffiti_url && (!isArtVisible || !isInFieldOfView) ? (
               /* Indicador quando o grafite existe mas está fora do campo de visão ou longe */
               <motion.div
                 initial={{ opacity: 0 }}
