@@ -356,8 +356,8 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
       <AnimatePresence>
         {activeArt && hudVisible && !isSearching && (
           <>
-            {/* MODO AR: Grafite fixo na coordenada real */}
-            {activeArt.graffiti_url && isArtVisible && isInFieldOfView ? (
+            {/* MODO AR: Grafite sobreposto ao Street View — como na vida real */}
+            {isArtVisible && isInFieldOfView ? (
               <motion.div
                 key={`ar-${activeArt.id}`}
                 initial={{ opacity: 0 }}
@@ -367,18 +367,25 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
                 className="absolute inset-0 z-40 pointer-events-none overflow-hidden"
               >
                 {/* O Grafite — fixo no muro via heading/pitch */}
+                {/* Usa graffiti_url (transparente) se disponível, senão image_url */}
                 <img
-                  src={activeArt.graffiti_url}
+                  src={activeArt.graffiti_url || activeArt.image_url}
                   alt={activeArt.title || 'Graffiti AR'}
-                  className="absolute object-contain drop-shadow-[0_0_40px_rgba(255,99,33,0.5)]"
+                  className="absolute object-contain"
                   style={{
                     left: `${artScreenX}%`,
                     top: `${artScreenY}%`,
                     transform: `translate(-50%, -50%) scale(${artScale})`,
                     maxWidth: '50%',
                     maxHeight: '45%',
-                    mixBlendMode: 'screen',
-                    // Sem transition → posicionamento instantâneo = fixo no muro
+                    // PNG transparente: usar blend normal para preservar cores reais
+                    // Adicionar sombra sutil para "colar" no muro
+                    filter: activeArt.graffiti_url 
+                      ? 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))' 
+                      : 'drop-shadow(0 4px 12px rgba(0,0,0,0.6))',
+                    // graffiti_url já é transparente → blend normal
+                    // image_url tem fundo → blend multiply para integrar com o muro
+                    mixBlendMode: activeArt.graffiti_url ? 'normal' : 'multiply',
                   }}
                 />
 
@@ -428,7 +435,7 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
                   </button>
                 </div>
               </motion.div>
-            ) : activeArt.graffiti_url && (!isArtVisible || !isInFieldOfView) ? (
+            ) : !isArtVisible || !isInFieldOfView ? (
               /* Indicador quando o grafite existe mas está fora do campo de visão ou longe */
               <motion.div
                 initial={{ opacity: 0 }}
@@ -463,80 +470,7 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
                   <X className="w-3 h-3 text-gray-400" />
                 </button>
               </motion.div>
-            ) : (
-              /* FALLBACK: Painel lateral para grafites antigos (sem graffiti_url) */
-              <motion.div
-                initial={{ opacity: 0, x: 300 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 300 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="absolute top-28 right-6 z-50 w-[340px] max-h-[calc(100vh-200px)] bg-black/40 backdrop-blur-xl border border-white/15 rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(255,99,33,0.15)]"
-              >
-                {/* HUD Header */}
-                <div className="flex items-center justify-between p-4 border-b border-white/10">
-                  <div className="flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-neon-green animate-pulse" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-neon-green">Art Detected</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {nearbyArts.length > 1 && (
-                      <span className="text-[10px] text-gray-500 font-mono">
-                        {activeArtIndex + 1} / {nearbyArts.length}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => setHudVisible(false)}
-                      className="p-1.5 hover:bg-white/10 rounded-full transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5 text-gray-400" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Art Image */}
-                <div className="relative">
-                  <img
-                    src={activeArt.image_url}
-                    alt={activeArt.title || 'Graffiti'}
-                    className="w-full aspect-[4/3] object-cover"
-                  />
-                  {nearbyArts.length > 1 && (
-                    <>
-                      <button
-                        onClick={() => setActiveArtIndex(i => (i - 1 + nearbyArts.length) % nearbyArts.length)}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/60 backdrop-blur-sm rounded-full hover:bg-black/80 transition-colors border border-white/10"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setActiveArtIndex(i => (i + 1) % nearbyArts.length)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/60 backdrop-blur-sm rounded-full hover:bg-black/80 transition-colors border border-white/10"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {/* Art Info */}
-                <div className="p-4 space-y-2">
-                  <h4 className="font-bold text-white text-sm truncate">
-                    {activeArt.title || 'Untitled Masterpiece'}
-                  </h4>
-                  <p className="text-[11px] text-gray-400 flex items-center gap-1.5 font-mono">
-                    <span className="text-neon-orange font-bold">BY</span>
-                    {activeArt.artist_address ? formatAddress(activeArt.artist_address) : 'Anon'}
-                  </p>
-                  <p className="text-[10px] text-gray-500 flex items-center gap-1 truncate">
-                    <MapPin className="w-3 h-3 text-neon-blue shrink-0" />
-                    {activeArt.address || 'Unknown'}
-                  </p>
-                  <p className="text-[9px] text-gray-600 font-mono">
-                    {new Date(activeArt.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </motion.div>
-            )}
+            ) : null}
           </>
         )}
       </AnimatePresence>
