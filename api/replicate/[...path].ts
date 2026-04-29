@@ -21,6 +21,7 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:5174',
   'https://urbanlayer.vercel.app',
+  'https://urbanlayer-six.vercel.app',
   'https://urbanlayer.app',
   'https://www.urbanlayer.app',
 ];
