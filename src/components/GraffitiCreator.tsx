@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Camera, MapPin, ArrowLeft, Loader2, Sparkles, Upload, Type, Check, RefreshCw, Send, Zap, Shield } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { GraffitiStyle } from '../types';
-import { generateGraffitiImage, saveGraffitiToWorld, processGraffitiMask, removeImageBackground } from '../AIService';
+import { generateGraffitiImage, saveGraffitiToWorld, processGraffitiMask, removeImageBackground, uploadToSupabase } from '../AIService';
 import { useWeb3 } from '../contexts/Web3Context';
+import { useAuth } from '../contexts/AuthContext';
 import { checkSpotOwnership, formatAddress, type MintResult } from '../services/Web3Service';
 import SpotPurchaseModal from './SpotPurchaseModal';
 import ViralExporterModal from './ViralExporterModal';
@@ -24,6 +25,7 @@ interface GraffitiCreatorProps {
 
 const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, onBack }) => {
   const { wallet } = useWeb3();
+  const { user } = useAuth();
   const [mode, setMode] = useState<'text' | 'image'>('text');
   const [text, setText] = useState('');
   const [selectedStyle, setSelectedStyle] = useState<GraffitiStyle>('wildstyle');
@@ -273,10 +275,20 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
       setIsSaving(true);
       try {
         let savedImageUrl = resultImage;
+        let isolatedGraffitiUrl: string | undefined;
 
         if (graffitiOverlay && !resultImage) {
+          // --- NOVO: Upload do grafite isolado (PNG transparente) para o Storage ---
+          try {
+            const response = await fetch(graffitiOverlay);
+            const blob = await response.blob();
+            isolatedGraffitiUrl = await uploadToSupabase(blob, 'graffitis');
+            console.log('✅ Grafite isolado salvo no Storage:', isolatedGraffitiUrl);
+          } catch (uploadErr) {
+            console.warn('⚠️ Falha ao salvar grafite isolado, continuando sem ele:', uploadErr);
+          }
+
           // Todas as artes devem ser opacas sobre o muro ('source-over').
-          // A pedido do usuário para testes, deixamos sem máscara para ver o quadrado do fundo branco real da imagem na colagem final.
           const blendMode: 'multiply' | 'source-over' = 'source-over';
           const applyMask = false;
 
@@ -289,13 +301,15 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
           savedImageUrl = finalCompositedCanvas;
         }
 
-        // Persistir no banco de dados
+        // Persistir no banco de dados (ambas URLs)
         if (savedImageUrl) {
           await saveGraffitiToWorld({
             lat: location.lat,
             lng: location.lng,
             address: location.name,
-            imageUrl: savedImageUrl
+            imageUrl: savedImageUrl,
+            graffitiUrl: isolatedGraffitiUrl,
+            artistUserId: user?.id,
           });
         }
 

@@ -13,7 +13,7 @@ const replicate = new Replicate({
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
-console.log("🔑 Google Client Configured - Key starts with:", GOOGLE_API_KEY.substring(0, 4) + "...");
+// API Key configurada (log removido por segurança)
 
 /**
  * Retorna a URL da imagem real do local via Google Street View Static API
@@ -116,18 +116,28 @@ export async function saveGraffitiToWorld(data: {
   lng: number;
   address: string;
   imageUrl: string;
+  graffitiUrl?: string;
+  artistUserId?: string;
 }) {
   try {
+    const insertData: Record<string, any> = {
+      lat: data.lat,
+      lng: data.lng,
+      address: data.address,
+      image_url: data.imageUrl,
+    };
+
+    if (data.graffitiUrl) {
+      insertData.graffiti_url = data.graffitiUrl;
+    }
+
+    if (data.artistUserId) {
+      insertData.artist_user_id = data.artistUserId;
+    }
+
     const { error } = await supabase
       .from('graffitis')
-      .insert([
-        {
-          lat: data.lat,
-          lng: data.lng,
-          address: data.address,
-          image_url: data.imageUrl,
-        }
-      ]);
+      .insert([insertData]);
 
     if (error) throw error;
     return true;

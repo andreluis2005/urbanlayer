@@ -4,10 +4,12 @@ import Globe from './components/Globe';
 import StreetExplorer from './components/StreetExplorer';
 import GraffitiCreator from './components/GraffitiCreator';
 import WalletButton from './components/WalletButton';
+import GlobalGallery, { type Graffiti } from './components/GlobalGallery';
 import LandingPage from './components/LandingPage';
 import { Web3Provider } from './contexts/Web3Context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { LayoutGrid } from 'lucide-react';
 
 /**
  * AppContent — Área protegida (após login)
@@ -19,6 +21,8 @@ function AppContent() {
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; name: string; heading?: number; pitch?: number } | null>(null);
   const [selectedWall, setSelectedWall] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'globe' | 'explorer' | 'creator'>('globe');
+  const [showGallery, setShowGallery] = useState(false);
+  const [discoveredGraffiti, setDiscoveredGraffiti] = useState<Graffiti | null>(null);
 
   const handleSelectLocation = (lat: number, lng: number, name: string) => {
     setSelectedLocation({ lat, lng, name });
@@ -43,6 +47,7 @@ function AppContent() {
     setCurrentView('globe');
     setSelectedLocation(null);
     setSelectedWall(null);
+    setDiscoveredGraffiti(null);
     navigate('/app');
   };
 
@@ -56,10 +61,23 @@ function AppContent() {
     }
   };
 
+  const handleGallerySelect = (graffiti: Graffiti) => {
+    setShowGallery(false);
+    setDiscoveredGraffiti(graffiti);
+    handleSelectLocation(graffiti.lat, graffiti.lng, graffiti.address || 'Street View');
+  };
+
   return (
     <div className="w-full h-screen bg-black text-white overflow-hidden">
-      {/* Wallet Button — Flutuante em todas as telas */}
-      <div className="fixed top-4 right-4 z-[150]">
+      {/* Menu / Ferramentas Flutuantes */}
+      <div className="fixed top-4 right-4 z-[150] flex items-center gap-4">
+        <button
+          onClick={() => setShowGallery(true)}
+          className="flex items-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl backdrop-blur-md transition-colors"
+        >
+          <LayoutGrid className="w-5 h-5 text-neon-green" />
+          <span className="text-xs font-bold uppercase tracking-widest hidden sm:block">Explorer</span>
+        </button>
         <WalletButton />
       </div>
 
@@ -88,6 +106,7 @@ function AppContent() {
               location={selectedLocation}
               onSelectSpot={handleSelectSpot}
               onBack={handleBackToGlobe}
+              discoveredGraffiti={discoveredGraffiti}
             />
           </motion.div>
         )}
@@ -114,6 +133,13 @@ function AppContent() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,transparent_0%,rgba(0,0,0,0.4)_100%)]" />
         <div className="absolute inset-0 opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
       </div>
+
+      {/* Global Gallery / Marketplace Overlay */}
+      <GlobalGallery 
+        isOpen={showGallery} 
+        onClose={() => setShowGallery(false)} 
+        onSelectGraffiti={handleGallerySelect}
+      />
     </div>
   );
 }
@@ -160,7 +186,7 @@ function AppRouter() {
     <Routes>
       {/* Landing Page — acessível sempre */}
       <Route path="/" element={
-        isAuthenticated ? <AppContent /> : <LandingPage onEnter={handleEnterApp} />
+        <LandingPage onEnter={handleEnterApp} />
       } />
       
       {/* App protegido — redireciona pra / se não autenticado */}
