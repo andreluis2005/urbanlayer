@@ -8,7 +8,7 @@
  * 3. Não Autenticado e Não Conectado -> Mostra Botão de Instalar ou Conectar
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wallet, Loader2, ChevronDown, ExternalLink, LogOut, Zap, AlertTriangle, User as UserIcon } from 'lucide-react';
 import { useWeb3 } from '../contexts/Web3Context';
@@ -17,10 +17,35 @@ import { formatAddress } from '../services/Web3Service';
 import { getActiveNetwork, getAddressUrl } from '../services/InkNetworkConfig';
 
 const WalletButton: React.FC = () => {
-  const { wallet, isWeb3Ready, isConnecting, connect, disconnect, switchNetwork, error } = useWeb3();
-  const { user, isAuthenticated, signOut } = useAuth();
+  const { wallet, isWeb3Ready, isConnecting, connect, disconnect, switchNetwork, silentConnect, error } = useWeb3();
+  const { user, isAuthenticated, walletAddress, signOut, signInWithWallet } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const network = getActiveNetwork();
+  const autoConnectAttempted = useRef(false);
+
+  /**
+   * AUTO-CONNECT: Quando o login é feito via MetaMask (signInWithWeb3),
+   * o Supabase cria a sessão, mas o Web3Context fica desconectado.
+   * Este efeito detecta essa situação e conecta automaticamente a wallet,
+   * evitando o clique extra em "Connect Wallet" após o Confirm.
+   */
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      walletAddress &&          // Login foi via Web3 (tem wallet no user)
+      !wallet.isConnected &&    // Web3Context ainda não conectou
+      isWeb3Ready &&            // MetaMask está instalado
+      !autoConnectAttempted.current  // Evita loops
+    ) {
+      autoConnectAttempted.current = true;
+      console.log('🔗 Auto-connect: Login Web3 detectado, conectando silenciosamente...');
+      silentConnect().finally(() => {
+        // Reset para permitir reconexão em caso de mudança de conta
+        autoConnectAttempted.current = false;
+      });
+    }
+  }, [isAuthenticated, walletAddress, wallet.isConnected, isWeb3Ready, silentConnect]);
 
   // Caso 1: Usuário não tem MetaMask / Web3 Provider instalado e não está logado
   if (!isWeb3Ready && !isAuthenticated) {
@@ -42,18 +67,22 @@ const WalletButton: React.FC = () => {
     return (
       <div className="flex flex-col items-end gap-1">
         <motion.button
-          onClick={connect}
-          disabled={isConnecting}
+          onClick={async () => {
+            setIsSigningIn(true);
+            await signInWithWallet();
+            setIsSigningIn(false);
+          }}
+          disabled={isSigningIn}
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-neon-orange to-orange-500 text-black rounded-xl text-xs font-bold uppercase tracking-wider shadow-[0_0_20px_rgba(255,99,33,0.3)] hover:shadow-[0_0_30px_rgba(255,99,33,0.5)] transition-shadow disabled:opacity-50"
         >
-          {isConnecting ? (
+          {isSigningIn ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
             <Wallet className="w-4 h-4" />
           )}
-          {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+          {isSigningIn ? 'Signing In...' : 'Connect Wallet'}
         </motion.button>
         {error && (
           <span className="text-red-400 text-[10px] font-mono max-w-[200px] truncate">{error}</span>

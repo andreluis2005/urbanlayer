@@ -11,6 +11,7 @@ import {
   onWalletStateChange,
   switchToInkNetwork,
   isWeb3Available,
+  silentConnectWallet,
   type WalletState,
 } from '../services/Web3Service';
 
@@ -21,6 +22,7 @@ interface Web3ContextType {
   connect: () => Promise<void>;
   disconnect: () => void;
   switchNetwork: () => Promise<boolean>;
+  silentConnect: () => Promise<void>;
   error: string | null;
 }
 
@@ -31,8 +33,11 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Escutar mudanças no estado da wallet
+  // Escutar mudanças no estado da wallet e tentar reconexão silenciosa
   useEffect(() => {
+    // Tenta reestabelecer a conexão silenciosamente na inicialização
+    silentConnectWallet().catch(err => console.warn('Falha no silent connect', err));
+    
     const unsubscribe = onWalletStateChange(setWallet);
     return unsubscribe;
   }, []);
@@ -69,6 +74,14 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     return await switchToInkNetwork();
   }, []);
 
+  const silentConnect = useCallback(async () => {
+    try {
+      await silentConnectWallet();
+    } catch (err) {
+      console.warn("Silent connect error", err);
+    }
+  }, []);
+
   return (
     <Web3Context.Provider value={{
       wallet,
@@ -77,6 +90,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       connect,
       disconnect,
       switchNetwork,
+      silentConnect,
       error,
     }}>
       {children}

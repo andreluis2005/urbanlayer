@@ -165,6 +165,55 @@ export async function connectWallet(): Promise<WalletState> {
 }
 
 /**
+ * Tenta conectar silenciosamente (sem abrir popup) se já houver permissão prévia
+ */
+export async function silentConnectWallet(): Promise<WalletState | null> {
+  if (!isWeb3Available()) return null;
+
+  try {
+    const ethereum = (window as any).ethereum;
+    // Usamos um provider temporário para checar contas sem pedir permissão
+    const tempProvider = new BrowserProvider(ethereum);
+    const accounts = await tempProvider.send('eth_accounts', []);
+
+    if (accounts && accounts.length > 0) {
+      browserProvider = tempProvider;
+      const address = accounts[0];
+      
+      const balance = await browserProvider.getBalance(address);
+      const network = await browserProvider.getNetwork();
+      const activeNetwork = getActiveNetwork();
+
+      currentWalletState = {
+        isConnected: true,
+        address,
+        balance: formatEther(balance),
+        chainId: Number(network.chainId),
+        isCorrectNetwork: Number(network.chainId) === activeNetwork.chainId,
+        networkName: activeNetwork.name,
+      };
+
+      try {
+        if (ethereum.on) {
+          ethereum.on('accountsChanged', handleAccountsChanged);
+          ethereum.on('chainChanged', handleChainChanged);
+        }
+      } catch (e) {
+        console.warn("⚠️ Não foi possível registrar listeners da wallet.");
+      }
+
+      console.log('🔗 Silently connected:', address);
+      notifyListeners();
+      return { ...currentWalletState };
+    }
+    return null;
+  } catch (error) {
+    console.warn('Silent connect failed:', error);
+    return null;
+  }
+}
+
+/**
  * Desconecta a wallet (limpa estado local)
  */
 export function disconnectWallet(): void {
