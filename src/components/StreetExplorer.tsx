@@ -6,11 +6,12 @@ import { getStreetViewUrl, checkExistingGraffiti, checkStreetViewCoverage } from
 import { supabase } from '../lib/supabase';
 import { formatAddress } from '../services/Web3Service';
 import type { Graffiti } from './GlobalGallery';
+import GraffitiOverlay from './GraffitiOverlay';
 
 
 interface StreetExplorerProps {
   location: { lat: number; lng: number; name: string };
-  onSelectSpot: (wallImage: string, exactLat: number, exactLng: number, heading: number, pitch: number) => void;
+  onSelectSpot: (wallImage: string, exactLat: number, exactLng: number, heading: number, pitch: number, panoId?: string) => void;
   onBack: () => void;
   discoveredGraffiti?: Graffiti | null;
 }
@@ -34,6 +35,8 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
   const [currentPitch, setCurrentPitch] = useState(0);
   const [currentLat, setCurrentLat] = useState(location.lat);
   const [currentLng, setCurrentLng] = useState(location.lng);
+  const [streetViewZoom, setStreetViewZoom] = useState(1);
+  const [currentPanoId, setCurrentPanoId] = useState<string | undefined>(undefined);
 
   const initInteractiveStreetView = async (forceReal = false) => {
     setIsSearching(true);
@@ -123,6 +126,17 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
           const pov = panorama.getPov();
           setCurrentHeading(pov.heading);
           setCurrentPitch(pov.pitch);
+        });
+
+        // Listener: Capturar zoom
+        panorama.addListener("zoom_changed", () => {
+          setStreetViewZoom(panorama.getZoom() || 1);
+        });
+
+        // Listener: Capturar pano_id
+        panorama.addListener("pano_changed", () => {
+          const panoId = panorama.getPano();
+          if (panoId) setCurrentPanoId(panoId);
         });
       }
 
@@ -261,11 +275,11 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
 
   const handleSprayHere = () => {
     if (isDemoMode && demoWall) {
-      onSelectSpot(demoWall, currentLat, currentLng, 0, 0);
+      onSelectSpot(demoWall, currentLat, currentLng, 0, 0, undefined);
     } else {
       // Capturar o quadro estático *exato* de onde a câmera está olhando agora
       const wallUrl = getStreetViewUrl(currentLat, currentLng, currentHeading, currentPitch);
-      onSelectSpot(wallUrl, currentLat, currentLng, currentHeading, currentPitch);
+      onSelectSpot(wallUrl, currentLat, currentLng, currentHeading, currentPitch, currentPanoId);
     }
   };
 
@@ -325,6 +339,17 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
           <>
             {/* Google Street View Container */}
             <div ref={mapRef} className="absolute inset-0 w-full h-full" />
+
+            {/* Spatial Graffiti Overlays */}
+            <GraffitiOverlay
+              graffitis={nearbyArts}
+              currentHeading={currentHeading}
+              currentPitch={currentPitch}
+              currentLat={currentLat}
+              currentLng={currentLng}
+              streetViewZoom={streetViewZoom}
+              currentPanoId={currentPanoId}
+            />
             
             {/* Crosshair Overlay to aim Graffiti */}
             <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-10">

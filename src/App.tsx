@@ -18,7 +18,7 @@ import { LayoutGrid } from 'lucide-react';
 function AppContent() {
   const navigate = useNavigate();
   const { signOut } = useAuth();
-  const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; name: string; heading?: number; pitch?: number } | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; name: string; heading?: number; pitch?: number; panoId?: string } | null>(null);
   const [selectedWall, setSelectedWall] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'globe' | 'explorer' | 'creator'>('globe');
   const [showGallery, setShowGallery] = useState(false);
@@ -30,13 +30,14 @@ function AppContent() {
     navigate(`/explore/${lat.toFixed(6)}/${lng.toFixed(6)}`);
   };
 
-  const handleSelectSpot = (wallImage: string, exactLat: number, exactLng: number, heading?: number, pitch?: number) => {
+  const handleSelectSpot = (wallImage: string, exactLat: number, exactLng: number, heading?: number, pitch?: number, panoId?: string) => {
     setSelectedLocation(prev => prev ? { 
       ...prev, 
       lat: exactLat, 
       lng: exactLng,
       heading: heading,
-      pitch: pitch
+      pitch: pitch,
+      panoId: panoId
     } : null);
     setSelectedWall(wallImage);
     setCurrentView('creator');

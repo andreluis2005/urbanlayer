@@ -118,6 +118,10 @@ export async function saveGraffitiToWorld(data: {
   imageUrl: string;
   graffitiUrl?: string;
   artistUserId?: string;
+  heading?: number;
+  pitch?: number;
+  scale?: number;
+  panoId?: string;
 }) {
   try {
     const insertData: Record<string, any> = {
@@ -134,6 +138,11 @@ export async function saveGraffitiToWorld(data: {
     if (data.artistUserId) {
       insertData.artist_user_id = data.artistUserId;
     }
+
+    if (data.heading !== undefined) insertData.heading = data.heading;
+    if (data.pitch !== undefined) insertData.pitch = data.pitch;
+    if (data.scale !== undefined) insertData.scale = data.scale;
+    if (data.panoId) insertData.pano_id = data.panoId;
 
     const { error } = await supabase
       .from('graffitis')

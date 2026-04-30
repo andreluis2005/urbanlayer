@@ -19,7 +19,7 @@ export type { AdvancedParams } from './creator/constants';
 
 interface GraffitiCreatorProps {
   wallImage: string;
-  location: { lat: number; lng: number; name: string };
+  location: { lat: number; lng: number; name: string; heading?: number; pitch?: number; panoId?: string };
   onBack: () => void;
 }
 
@@ -310,6 +310,10 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
             imageUrl: savedImageUrl,
             graffitiUrl: isolatedGraffitiUrl,
             artistUserId: user?.id,
+            heading: location.heading,
+            pitch: location.pitch,
+            scale: graffitiScale,
+            panoId: location.panoId,
           });
         }
 
