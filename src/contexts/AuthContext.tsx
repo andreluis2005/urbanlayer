@@ -23,9 +23,6 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   walletAddress: string | null;
-  signInWithEmail: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUpWithEmail: (email: string, password: string, name?: string) => Promise<{ error: string | null }>;
-  signInWithGoogle: () => Promise<{ error: string | null }>;
   signInWithWallet: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -91,32 +88,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // --- Métodos de autenticação ---
 
-  const signInWithEmail = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
-  };
-
-  const signUpWithEmail = async (email: string, password: string, name?: string) => {
-    const { error } = await supabase.auth.signUp({ 
-      email, 
-      password,
-      options: {
-        data: { full_name: name || '' }
-      }
-    });
-    return { error: error?.message ?? null };
-  };
-
-  const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({ 
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      }
-    });
-    return { error: error?.message ?? null };
-  };
-
   /**
    * Login via Wallet EVM (MetaMask, Rabby, etc.)
    * 
@@ -181,9 +152,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isAuthenticated,
       walletAddress,
-      signInWithEmail,
-      signUpWithEmail,
-      signInWithGoogle,
       signInWithWallet,
       signOut,
     }}>

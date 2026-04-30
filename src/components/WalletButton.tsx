@@ -10,7 +10,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet, Loader2, ChevronDown, ExternalLink, LogOut, Zap, AlertTriangle, User as UserIcon } from 'lucide-react';
+import { Wallet, Loader2, ChevronDown, ExternalLink, LogOut, Zap, AlertTriangle } from 'lucide-react';
 import { useWeb3 } from '../contexts/Web3Context';
 import { useAuth } from '../contexts/AuthContext';
 import { formatAddress } from '../services/Web3Service';
@@ -18,7 +18,7 @@ import { getActiveNetwork, getAddressUrl } from '../services/InkNetworkConfig';
 
 const WalletButton: React.FC = () => {
   const { wallet, isWeb3Ready, isConnecting, connect, disconnect, switchNetwork, silentConnect, error } = useWeb3();
-  const { user, isAuthenticated, walletAddress, signOut, signInWithWallet } = useAuth();
+  const { isAuthenticated, walletAddress, signOut, signInWithWallet } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const network = getActiveNetwork();
@@ -91,78 +91,17 @@ const WalletButton: React.FC = () => {
     );
   }
 
-  // Identifica como o usuário está logado
-  const isGoogleUser = isAuthenticated && user?.app_metadata?.provider === 'google';
-  const displayEmail = user?.email;
-  const avatarUrl = user?.user_metadata?.avatar_url;
-
-  // Caso 3: Logado via Google/Email, mas sem Wallet conectada
-  // Mostra um perfil simples + botão de conectar wallet + menu dropdown
+  // Caso 3: Logado, mas wallet ainda não hidratada (ex: carregando silentConnect após F5)
   if (isAuthenticated && !wallet.isConnected) {
     return (
-      <div className="relative flex items-center gap-3">
-        {/* Sugestão para conectar wallet se quiser mintar grafites */}
-        <motion.button
-          onClick={connect}
-          disabled={isConnecting}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-mono uppercase tracking-wider transition-all backdrop-blur-md"
-        >
-          {isConnecting ? <Loader2 className="w-3 h-3 animate-spin text-neon-orange" /> : <Wallet className="w-3 h-3 text-neon-orange" />}
-          <span className="hidden sm:inline">Connect Wallet</span>
-        </motion.button>
-
-        {/* User Menu Button */}
-        <motion.button
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-          whileHover={{ scale: 1.02 }}
-          className="flex items-center gap-3 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl backdrop-blur-md transition-all"
-        >
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="Avatar" className="w-6 h-6 rounded-full border border-white/20" />
-          ) : (
-            <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-500 to-neon-orange flex items-center justify-center border border-white/20">
-              <UserIcon className="w-3 h-3 text-white" />
-            </div>
-          )}
-          <div className="flex flex-col items-start hidden sm:flex">
-            <span className="text-xs font-bold text-white">{isGoogleUser ? 'Google User' : 'Authenticated'}</span>
-            <span className="text-[10px] text-gray-400 font-mono truncate max-w-[100px]">{displayEmail}</span>
-          </div>
-          <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
-        </motion.button>
-
-        {/* Dropdown Menu para Usuários sem Wallet (Google/Email) */}
-        <AnimatePresence>
-          {isMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -5, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -5, scale: 0.95 }}
-              className="absolute top-full right-0 mt-2 w-56 bg-black/90 border border-white/10 rounded-xl backdrop-blur-xl shadow-2xl overflow-hidden z-[200]"
-            >
-              <button
-                onClick={() => { 
-                  signOut(); 
-                  setIsMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
-              >
-                <LogOut className="w-4 h-4 text-red-400" />
-                <span className="text-xs font-bold text-red-400">Disconnect & Leave</span>
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Overlay Invisível */}
-        {isMenuOpen && <div className="fixed inset-0 z-[199]" onClick={() => setIsMenuOpen(false)} />}
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl backdrop-blur-md">
+        <Loader2 className="w-4 h-4 animate-spin text-neon-orange" />
+        <span className="text-xs text-gray-400 font-mono">Restoring session...</span>
       </div>
     );
   }
 
-  // Caso 4: Conectado com Wallet (seja Login via Web3 ou Google + Wallet conectada depois)
+  // Caso 4: Conectado e Autenticado
   return (
     <div className="relative">
       <motion.button

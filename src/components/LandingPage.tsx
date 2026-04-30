@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { MapPin, Palette, ShoppingBag, Swords, ChevronDown, Globe2, Sparkles, Shield, Layers, Crown, Diamond, Award, Medal, Zap } from 'lucide-react';
-import AuthModal from './AuthModal';
+import WalletModal from './WalletModal';
 import SocialFeedTicker from './SocialFeedTicker';
 
 interface LandingPageProps {
@@ -81,7 +81,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             onClick={() => setShowAuth(true)}
             className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity"
           >
-            Entrar
+            Connect Wallet
           </button>
         </div>
       </nav>
@@ -155,7 +155,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
               onClick={() => setShowAuth(true)}
               className="group px-8 py-4 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl font-bold text-lg hover:shadow-[0_0_40px_rgba(139,92,246,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
-              Comece a Explorar
+              Connect Wallet
               <span className="inline-block ml-2 group-hover:translate-x-1 transition-transform">→</span>
             </button>
             <a
@@ -355,7 +355,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             onClick={() => setShowAuth(true)}
             className="px-10 py-5 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl font-bold text-xl hover:shadow-[0_0_60px_rgba(139,92,246,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
-            Entrar na Plataforma →
+            Connect Wallet →
           </motion.button>
         </div>
       </section>
@@ -373,8 +373,8 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
         </div>
       </footer>
 
-      {/* --- AUTH MODAL --- */}
-      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} onSuccess={onEnter} />
+      {/* --- WALLET MODAL --- */}
+      <WalletModal isOpen={showAuth} onClose={() => setShowAuth(false)} onSuccess={onEnter} />
     </div>
   );
 }
