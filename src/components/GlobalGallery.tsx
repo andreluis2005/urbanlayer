@@ -16,8 +16,6 @@ export interface Graffiti {
   lat: number;
   lng: number;
   graffiti_url?: string | null;
-  heading?: number | null;
-  pitch?: number | null;
 }
 
 interface GlobalGalleryProps {
