@@ -282,7 +282,7 @@ const GraffitiCreator: React.FC<GraffitiCreatorProps> = ({ wallImage, location, 
           try {
             const response = await fetch(graffitiOverlay);
             const blob = await response.blob();
-            isolatedGraffitiUrl = await uploadToSupabase(blob, 'graffitis');
+            isolatedGraffitiUrl = await uploadToSupabase(blob, 'graffitis', 'image/png');
             console.log('✅ Grafite isolado salvo no Storage:', isolatedGraffitiUrl);
           } catch (uploadErr) {
             console.warn('⚠️ Falha ao salvar grafite isolado, continuando sem ele:', uploadErr);

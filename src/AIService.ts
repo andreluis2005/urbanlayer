@@ -85,13 +85,14 @@ export async function checkExistingGraffiti(lat: number, lng: number) {
  * Faz upload de um arquivo ou blob para o Supabase Storage e retorna a URL pública.
  * Isso é essencial para que a IA (Replicate) receba um link limpo e não um Base64 corrompido.
  */
-export async function uploadToSupabase(file: Blob, bucketName: string = 'graffitis'): Promise<string> {
-  const fileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+export async function uploadToSupabase(file: Blob, bucketName: string = 'graffitis', contentType: string = 'image/jpeg'): Promise<string> {
+  const ext = contentType === 'image/png' ? 'png' : 'jpg';
+  const fileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
   
   const { error } = await supabase.storage
     .from(bucketName)
     .upload(fileName, file, {
-      contentType: 'image/jpeg',
+      contentType: contentType,
       upsert: true
     });
 
@@ -235,7 +236,8 @@ Ultra-detailed, photorealistic, 8k, high texture fidelity, cinematic realism`;
     let model: any = "black-forest-labs/flux-schnell";
 
     if (imageInput && !prompt) {
-       model = portraitModel;
+       // Usar IP-Adapter FaceID para preservar a identidade, mantendo o estilo visual no prompt
+       model = "lucataco/ip_adapter-sdxl-face:226c6bf67a75a129b0f978e518fed33e1fb13956e15761c1ac53c9d2f898c9af";
        
        // Preparar a imagem de entrada
        let imageValue: string = "";
@@ -260,12 +262,13 @@ Ultra-detailed, photorealistic, 8k, high texture fidelity, cinematic realism`;
        // Forçar resolução alta (SDXL nativo)
        input.width = 1024;
        input.height = 1024;
-       // Voltando para parâmetros de transformação autêntica (Street Art)
-       input.prompt_strength = 0.75; 
+       // Usando parâmetros para o IP-Adapter
+       input.scale = 0.7; // Força de preservação do rosto (0.0 a 1.0)
        input.num_inference_steps = 35;
-       input.guidance_scale = 9.0; 
+       input.guidance_scale = 8.0; 
        input.negative_prompt = "text, words, letters, signature, logo, watermark, typography, cartoon, clean digital art, artificial face, blurred face, blurry, messy colors, naked, nudity";
        input.disable_safety_checker = true;
+       delete input.prompt_strength; // IP-Adapter não usa prompt_strength
        
        console.log("⚙️ Replicate SDXL Params:", { ...input, image: "(data URI " + Math.round(imageValue.length / 1024) + "KB)" });
     }
