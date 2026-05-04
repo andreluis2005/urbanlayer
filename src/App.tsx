@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import Globe from './components/Globe';
 import StreetExplorer from './components/StreetExplorer';
 import GraffitiCreator from './components/GraffitiCreator';
@@ -8,6 +8,7 @@ import GlobalGallery, { type Graffiti } from './components/GlobalGallery';
 import LandingPage from './components/LandingPage';
 import { Web3Provider } from './contexts/Web3Context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { supabase } from './lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { LayoutGrid } from 'lucide-react';
 
@@ -23,6 +24,27 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<'globe' | 'explorer' | 'creator'>('globe');
   const [showGallery, setShowGallery] = useState(false);
   const [discoveredGraffiti, setDiscoveredGraffiti] = useState<Graffiti | null>(null);
+
+  // Deep link: /art/:graffitiId
+  const params = useParams();
+  useEffect(() => {
+    const artId = params['*']?.match(/^art\/(.+)/)?.[1] || params.graffitiId;
+    if (!artId || discoveredGraffiti) return;
+
+    const loadArt = async () => {
+      const { data } = await supabase
+        .from('graffitis')
+        .select('*')
+        .eq('id', artId)
+        .single();
+      if (data) {
+        const g = data as Graffiti;
+        setDiscoveredGraffiti(g);
+        handleSelectLocation(g.lat, g.lng, g.address || 'Street View');
+      }
+    };
+    loadArt();
+  }, [params]);
 
   const handleSelectLocation = (lat: number, lng: number, name: string) => {
     setSelectedLocation({ lat, lng, name });
@@ -198,6 +220,9 @@ function AppRouter() {
         isAuthenticated ? <AppContent /> : <LandingPage onEnter={handleEnterApp} />
       } />
       <Route path="/create/*" element={
+        isAuthenticated ? <AppContent /> : <LandingPage onEnter={handleEnterApp} />
+      } />
+      <Route path="/art/:graffitiId" element={
         isAuthenticated ? <AppContent /> : <LandingPage onEnter={handleEnterApp} />
       } />
       

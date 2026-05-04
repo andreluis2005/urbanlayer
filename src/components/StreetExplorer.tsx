@@ -1,12 +1,13 @@
 /// <reference types="@types/google.maps" />
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, ArrowRight, Loader2, Sparkles, Search, Ban, Map as MapIcon, AlertTriangle, RefreshCcw, Crosshair, ChevronLeft, ChevronRight, X, Eye } from 'lucide-react';
+import { MapPin, ArrowRight, Loader2, Sparkles, Search, Ban, Map as MapIcon, AlertTriangle, RefreshCcw, Crosshair, ChevronLeft, ChevronRight, X, Eye, Navigation2 } from 'lucide-react';
 import { getStreetViewUrl, checkExistingGraffiti, checkStreetViewCoverage } from '../AIService';
 import { supabase } from '../lib/supabase';
 import { formatAddress } from '../services/Web3Service';
 import type { Graffiti } from './GlobalGallery';
 import GraffitiOverlay from './GraffitiOverlay';
+import GraffitiDetailModal from './GraffitiDetailModal';
 
 
 interface StreetExplorerProps {
@@ -37,6 +38,10 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
   const [currentLng, setCurrentLng] = useState(location.lng);
   const [streetViewZoom, setStreetViewZoom] = useState(1);
   const [currentPanoId, setCurrentPanoId] = useState<string | undefined>(undefined);
+
+  // Modal de detalhe
+  const [detailGraffiti, setDetailGraffiti] = useState<Graffiti | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const initInteractiveStreetView = async (forceReal = false) => {
     setIsSearching(true);
@@ -349,7 +354,53 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
               currentLng={currentLng}
               streetViewZoom={streetViewZoom}
               currentPanoId={currentPanoId}
+              onGraffitiClick={(g) => { setDetailGraffiti(g); setShowDetailModal(true); }}
             />
+
+            {/* === Bússola Direcional AR === */}
+            {nearbyArts.filter(art => {
+              if (!art.graffiti_url || art.heading == null) return false;
+              const dH = ((art.heading - currentHeading) % 360 + 540) % 360 - 180;
+              const fov = 180 / Math.pow(2, streetViewZoom);
+              return Math.abs(dH) > fov / 2; // Fora do FOV
+            }).map(art => {
+              const bearing = Math.atan2(
+                Math.sin((art.lng - currentLng) * Math.PI / 180) * Math.cos(art.lat * Math.PI / 180),
+                Math.cos(currentLat * Math.PI / 180) * Math.sin(art.lat * Math.PI / 180) -
+                Math.sin(currentLat * Math.PI / 180) * Math.cos(art.lat * Math.PI / 180) * Math.cos((art.lng - currentLng) * Math.PI / 180)
+              ) * 180 / Math.PI;
+              let delta = ((bearing - currentHeading) % 360 + 540) % 360 - 180;
+              const dist = Math.sqrt(Math.pow((art.lat - currentLat) * 111320, 2) + Math.pow((art.lng - currentLng) * 111320 * Math.cos(currentLat * Math.PI / 180), 2));
+              const isClose = dist < 30;
+              // Position: left/right edge based on delta sign
+              const side = delta > 0 ? 'right' : 'left';
+              const verticalPos = Math.min(80, Math.max(20, 50 - (delta / 180) * 30));
+              return (
+                <button
+                  key={`compass-${art.id}`}
+                  onClick={() => {
+                    if (panoramaRef.current) {
+                      panoramaRef.current.setPov({ heading: bearing, pitch: currentPitch });
+                    }
+                  }}
+                  className="absolute z-20 pointer-events-auto animate-compass-glow"
+                  style={{
+                    [side]: '12px',
+                    top: `${verticalPos}%`,
+                    color: isClose ? '#00FF00' : '#FACC15',
+                  }}
+                  title={art.title || 'Graffiti nearby'}
+                >
+                  <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-2 rounded-full border border-current/30">
+                    <Navigation2
+                      className="w-4 h-4"
+                      style={{ transform: `rotate(${delta > 0 ? 90 : -90}deg)` }}
+                    />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">{Math.round(dist)}m</span>
+                  </div>
+                </button>
+              );
+            })}
             
             {/* Crosshair Overlay to aim Graffiti */}
             <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-10">
@@ -586,6 +637,14 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
           </button>
         </motion.div>
       )}
+
+      {/* Modal de Detalhe do Grafite */}
+      <GraffitiDetailModal
+        graffiti={detailGraffiti}
+        isOpen={showDetailModal}
+        onClose={() => { setShowDetailModal(false); setDetailGraffiti(null); }}
+        onNavigateToStreetView={() => { setShowDetailModal(false); setDetailGraffiti(null); }}
+      />
     </div>
   );
 };

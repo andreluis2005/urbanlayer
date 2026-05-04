@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
-import { X, Loader2, MapPin, PaintBucket, Crown, Zap, Sparkles, Search, Globe2, User } from 'lucide-react';
+import { X, Loader2, MapPin, PaintBucket, Crown, Zap, Sparkles, Search, Globe2, User, Heart, Eye, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import { formatAddress } from '../services/Web3Service';
 import { useWeb3 } from '../contexts/Web3Context';
+import GraffitiDetailModal from './GraffitiDetailModal';
 
 export interface Graffiti {
   id: string;
@@ -20,6 +21,10 @@ export interface Graffiti {
   pitch?: number | null;
   scale?: number | null;
   pano_id?: string | null;
+  style?: string | null;
+  is_ai_generated?: boolean | null;
+  likes?: number;
+  views?: number;
 }
 
 interface GlobalGalleryProps {
@@ -30,6 +35,7 @@ interface GlobalGalleryProps {
 
 type TabType = 'global' | 'personal';
 type TierFilter = 'all' | 'legendary' | 'gold' | 'silver' | 'bronze';
+type SortOption = 'newest' | 'oldest' | 'popular' | 'views';
 
 export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: GlobalGalleryProps) {
   const { wallet } = useWeb3();
@@ -40,7 +46,13 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
   const [activeTab, setActiveTab] = useState<TabType>('global');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTier, setActiveTier] = useState<TierFilter>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [showSortMenu, setShowSortMenu] = useState(false);
   
+  // Modal State
+  const [selectedGraffiti, setSelectedGraffiti] = useState<Graffiti | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
   // Debounce para a busca por texto
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -56,10 +68,32 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
     
     setIsLoading(true);
     try {
+      // Determinar ordenação
+      let orderCol = 'created_at';
+      let ascending = false;
+
+      switch (sortBy) {
+        case 'oldest':
+          orderCol = 'created_at';
+          ascending = true;
+          break;
+        case 'popular':
+          orderCol = 'likes';
+          ascending = false;
+          break;
+        case 'views':
+          orderCol = 'views';
+          ascending = false;
+          break;
+        default: // newest
+          orderCol = 'created_at';
+          ascending = false;
+      }
+
       let query = supabase
         .from('graffitis')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order(orderCol, { ascending });
 
       // Filtro de Aba (Minhas Artes)
       if (activeTab === 'personal') {
@@ -68,7 +102,6 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
           setIsLoading(false);
           return;
         }
-        // Case-insensitive match ou exato para o endereço da carteira
         query = query.ilike('artist_address', wallet.address);
       }
 
@@ -79,10 +112,8 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
 
       // Filtro de Raridade (Tier)
       if (activeTier !== 'all') {
-        // Se o tier for 'bronze', podemos assumir null ou 'bronze' dependendo da base.
-        // Assumindo que a base tem o campo tier certinho:
         if (activeTier === 'bronze') {
-           query = query.is('tier', null); // Default spots são null/bronze
+           query = query.is('tier', null);
         } else {
            query = query.eq('tier', activeTier);
         }
@@ -99,7 +130,7 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
     } finally {
       setIsLoading(false);
     }
-  }, [isOpen, activeTab, debouncedSearch, activeTier, wallet.address]);
+  }, [isOpen, activeTab, debouncedSearch, activeTier, sortBy, wallet.address]);
 
   useEffect(() => {
     fetchGraffitis();
@@ -113,6 +144,24 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
       default: return <PaintBucket className="w-4 h-4 text-neon-orange" />;
     }
   };
+
+  const handleCardClick = (graffiti: Graffiti) => {
+    setSelectedGraffiti(graffiti);
+    setShowDetailModal(true);
+  };
+
+  const handleNavigateToStreetView = (graffiti: Graffiti) => {
+    setShowDetailModal(false);
+    setSelectedGraffiti(null);
+    onSelectGraffiti(graffiti);
+  };
+
+  const sortOptions: { value: SortOption; label: string; icon: string }[] = [
+    { value: 'newest', label: 'Most Recent', icon: '🕐' },
+    { value: 'oldest', label: 'Oldest First', icon: '📅' },
+    { value: 'popular', label: 'Most Liked', icon: '❤️' },
+    { value: 'views', label: 'Most Viewed', icon: '👁️' },
+  ];
 
   if (!isOpen) return null;
 
@@ -177,21 +226,61 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
               />
             </div>
 
-            {/* Tier Filter Pills */}
-            <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide shrink-0">
-              {(['all', 'legendary', 'gold', 'silver', 'bronze'] as TierFilter[]).map((tier) => (
+            {/* Sort + Tier Filter Row */}
+            <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
+              {/* Sort Dropdown */}
+              <div className="relative">
                 <button
-                  key={tier}
-                  onClick={() => setActiveTier(tier)}
-                  className={`px-4 py-2 rounded-full border text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${
-                    activeTier === tier 
-                      ? 'bg-neon-green/20 border-neon-green text-neon-green shadow-[0_0_10px_rgba(0,255,0,0.2)]' 
-                      : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/30 hover:text-white'
-                  }`}
+                  onClick={() => setShowSortMenu(!showSortMenu)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-white hover:border-white/20 transition-all"
                 >
-                  {tier}
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  {sortOptions.find(s => s.value === sortBy)?.label}
                 </button>
-              ))}
+
+                <AnimatePresence>
+                  {showSortMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                      className="absolute top-full mt-2 right-0 w-48 bg-[#111] border border-white/10 rounded-xl overflow-hidden shadow-xl z-30"
+                    >
+                      {sortOptions.map(option => (
+                        <button
+                          key={option.value}
+                          onClick={() => { setSortBy(option.value); setShowSortMenu(false); }}
+                          className={`w-full px-4 py-3 text-left text-xs font-bold uppercase tracking-wider flex items-center gap-3 transition-colors ${
+                            sortBy === option.value
+                              ? 'bg-neon-green/10 text-neon-green'
+                              : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                          }`}
+                        >
+                          <span>{option.icon}</span>
+                          {option.label}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Tier Filter Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {(['all', 'legendary', 'gold', 'silver', 'bronze'] as TierFilter[]).map((tier) => (
+                  <button
+                    key={tier}
+                    onClick={() => setActiveTier(tier)}
+                    className={`px-4 py-2 rounded-full border text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${
+                      activeTier === tier 
+                        ? 'bg-neon-green/20 border-neon-green text-neon-green shadow-[0_0_10px_rgba(0,255,0,0.2)]' 
+                        : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/30 hover:text-white'
+                    }`}
+                  >
+                    {tier}
+                  </button>
+                ))}
+              </div>
             </div>
             
           </div>
@@ -225,7 +314,7 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
               {items.map((item, i) => (
                 <motion.div
                   key={item.id}
-                  onClick={() => onSelectGraffiti(item)}
+                  onClick={() => handleCardClick(item)}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
@@ -260,9 +349,19 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
                         <MapPin className="w-3 h-3 text-neon-blue shrink-0" />
                         {item.address || 'Unknown Location'}
                       </p>
-                      <p className="text-[9px] text-gray-600 font-mono mt-2">
-                        {new Date(item.created_at).toLocaleDateString()}
-                      </p>
+
+                      {/* Social counters */}
+                      <div className="flex items-center gap-4 pt-1.5">
+                        <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                          <Heart className="w-3 h-3" /> {(item as any).likes || 0}
+                        </span>
+                        <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                          <Eye className="w-3 h-3" /> {(item as any).views || 0}
+                        </span>
+                        <span className="text-[9px] text-gray-600 font-mono ml-auto">
+                          {new Date(item.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -271,6 +370,14 @@ export default function GlobalGallery({ isOpen, onClose, onSelectGraffiti }: Glo
           )}
         </div>
       </motion.div>
+
+      {/* Graffiti Detail Modal */}
+      <GraffitiDetailModal
+        graffiti={selectedGraffiti}
+        isOpen={showDetailModal}
+        onClose={() => { setShowDetailModal(false); setSelectedGraffiti(null); }}
+        onNavigateToStreetView={handleNavigateToStreetView}
+      />
     </AnimatePresence>
   );
 }

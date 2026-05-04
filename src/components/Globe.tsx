@@ -11,6 +11,29 @@ interface GlobeProps {
   onSelectLocation: (lat: number, lng: number, name: string) => void;
 }
 
+/**
+ * Converte dados de grafites do Supabase para GeoJSON FeatureCollection.
+ */
+function toGeoJSON(items: any[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: items.map(item => ({
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [item.lng, item.lat],
+      },
+      properties: {
+        id: item.id,
+        title: item.title || 'Untitled',
+        tier: item.tier || 'bronze',
+        image_url: item.image_url || '',
+        address: item.address || '',
+      },
+    })),
+  };
+}
+
 const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -22,6 +45,8 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
   const [transitionText, setTransitionText] = useState('');
   const isFlying = useRef(false);
   const realtimeChannelRef = useRef<any>(null);
+  const isRotatingRef = useRef(isRotating);
+  isRotatingRef.current = isRotating;
 
   const stepZoom = useCallback((lat: number, lng: number, message: string, targetZoom: number, triggerExplorer: boolean, fullLocationName: string) => {
     const map = mapRef.current;
@@ -65,10 +90,10 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
     const map = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/dark-v11',
-      center: [-46.6333, -23.5505], // Start at some point
+      center: [-46.6333, -23.5505],
       zoom: 1.5,
       pitch: 0,
-      projection: 'globe', // This is what gives us the 3D globe!
+      projection: 'globe',
       interactive: true,
     });
     
@@ -77,23 +102,22 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
     map.on('style.load', () => {
       // Add atmosphere and stars for a true "out in space" effect
       map.setFog({
-        color: 'rgb(24, 24, 27)', // Lower atmosphere
-        'high-color': 'rgb(10, 10, 10)', // Upper atmosphere
-        'horizon-blend': 0.1, // Atmosphere thickness
-        'space-color': 'rgb(0, 0, 0)', // Background color
-        'star-intensity': 0.5 // Background star brightness
+        color: 'rgb(24, 24, 27)',
+        'high-color': 'rgb(10, 10, 10)',
+        'horizon-blend': 0.1,
+        'space-color': 'rgb(0, 0, 0)',
+        'star-intensity': 0.5
       });
     });
 
     // Rotation logic
     let animationId: number;
     const spinGlobe = () => {
-      // Se o componente foi desmontado ou não está rotacionando, para a animação imediatamente
-      if (!isRotating || !mapRef.current) return;
+      if (!isRotatingRef.current || !mapRef.current) return;
       
       try {
         const currentCenter = map.getCenter();
-        currentCenter.lng -= 0.1; // Single degree per frame approx
+        currentCenter.lng -= 0.1;
         if (currentCenter.lng < -180) currentCenter.lng += 360;
         
         map.easeTo({ center: currentCenter, duration: 20, easing: (n) => n });
@@ -103,149 +127,243 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
       }
     };
     
-    // Enable rotation when map is idle a bit, start with spinning
-    map.on('load', () => {
-      spinGlobe();
-
-      // === GRAFFITI CLUSTERS ===
-      map.addSource('graffitis', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-        cluster: true,
-        clusterMaxZoom: 14,
-        clusterRadius: 50,
-      });
-
-      // Glow behind clusters
-      map.addLayer({
-        id: 'cluster-glow',
-        type: 'circle',
-        source: 'graffitis',
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': '#FF6321',
-          'circle-radius': ['step', ['get', 'point_count'], 28, 10, 36, 50, 44, 100, 52],
-          'circle-opacity': 0.15,
-          'circle-blur': 1,
-        },
-      });
-
-      // Cluster circles
-      map.addLayer({
-        id: 'clusters',
-        type: 'circle',
-        source: 'graffitis',
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': ['step', ['get', 'point_count'], '#FF6321', 10, '#FF4500', 50, '#FF2200', 100, '#CC0000'],
-          'circle-radius': ['step', ['get', 'point_count'], 18, 10, 24, 50, 30, 100, 36],
-          'circle-opacity': 0.85,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': 'rgba(255, 255, 255, 0.3)',
-        },
-      });
-
-      // Cluster count labels
-      map.addLayer({
-        id: 'cluster-count',
-        type: 'symbol',
-        source: 'graffitis',
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': ['get', 'point_count_string'],
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
-          'text-size': 13,
-        },
-        paint: { 'text-color': '#FFFFFF' },
-      });
-
-      // Individual unclustered points
-      map.addLayer({
-        id: 'unclustered-point',
-        type: 'circle',
-        source: 'graffitis',
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': ['match', ['get', 'tier'], 'legendary', '#A855F7', 'gold', '#EAB308', 'silver', '#94A3B8', '#FF6321'],
-          'circle-radius': 7,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#FFFFFF',
-        },
-      });
-
-      // Click cluster → expand
-      map.on('click', 'clusters', (e) => {
-        const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
-        if (!features.length) return;
-        const clusterId = features[0].properties?.cluster_id;
-        const source = map.getSource('graffitis') as mapboxgl.GeoJSONSource;
-        source.getClusterExpansionZoom(clusterId, (err, zoom) => {
-          if (err) return;
-          const coords = (features[0].geometry as GeoJSON.Point).coordinates as [number, number];
-          map.flyTo({ center: coords, zoom: (zoom as number) ?? 4, speed: 1.5, curve: 1.2 });
-        });
-      });
-
-      // Click individual point → navigate to graffiti
-      map.on('click', 'unclustered-point', (e) => {
-        const features = map.queryRenderedFeatures(e.point, { layers: ['unclustered-point'] });
-        if (!features.length) return;
-        const coords = (features[0].geometry as GeoJSON.Point).coordinates;
-        const props = features[0].properties || {};
-        stopSpinning();
-        stepZoom(coords[1], coords[0], `Aterrissando em ${props.title || 'Grafite'}...`, 18, true, props.address || 'Street View');
-      });
-
-      // Cursor changes on hover
-      map.on('mouseenter', 'clusters', () => { map.getCanvas().style.cursor = 'pointer'; });
-      map.on('mouseleave', 'clusters', () => { map.getCanvas().style.cursor = ''; });
-      map.on('mouseenter', 'unclustered-point', () => { map.getCanvas().style.cursor = 'pointer'; });
-      map.on('mouseleave', 'unclustered-point', () => { map.getCanvas().style.cursor = ''; });
-
-      // === FETCH GRAFFITI DATA (source is guaranteed to exist here) ===
-      const loadGraffitiMarkers = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('graffitis')
-            .select('id, lat, lng, title, tier, image_url, address')
-            .or('is_visible.eq.true,is_visible.is.null');
-          if (error) { console.error('Globe: Error fetching graffitis:', error); return; }
-          if (!data || data.length === 0) { console.log('🗺️ Globe: Nenhum grafite encontrado'); return; }
-
-          const geojson: GeoJSON.FeatureCollection = {
-            type: 'FeatureCollection',
-            features: data.map((g: any) => ({
-              type: 'Feature' as const,
-              geometry: { type: 'Point' as const, coordinates: [g.lng, g.lat] },
-              properties: { id: g.id, title: g.title || 'Untitled', tier: g.tier || 'bronze', image_url: g.image_url, address: g.address || '' },
-            })),
-          };
-
-          const source = map.getSource('graffitis') as mapboxgl.GeoJSONSource;
-          if (source) {
-            source.setData(geojson);
-            console.log(`🗺️ Globe: ${data.length} grafites carregados no mapa`);
-          }
-        } catch (err) {
-          console.error('Globe: Error loading graffiti markers:', err);
-        }
-      };
-
-      loadGraffitiMarkers();
-
-      // Realtime: atualiza marcadores quando novos grafites são criados
-      realtimeChannelRef.current = supabase
-        .channel('globe-graffiti-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'graffitis' }, () => {
-          loadGraffitiMarkers();
-        })
-        .subscribe();
-    });
-    
     const stopSpinning = () => {
       setIsRotating(false);
       if (animationId) cancelAnimationFrame(animationId);
     };
+
+    map.on('load', () => {
+      spinGlobe();
+      console.log('🗺️ Globe: Map loaded, setting up GeoJSON clusters...');
+
+      // === GRAFFITI CLUSTERS (GeoJSON Source nativo do Mapbox) ===
+      const loadGraffitiClusters = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('graffitis')
+            .select('id, lat, lng, title, tier, image_url, address');
+          if (error) { console.error('🗺️ Globe: Fetch error:', error); return; }
+          if (!data || data.length === 0) { console.log('🗺️ Globe: Nenhum grafite encontrado'); return; }
+
+          console.log(`🗺️ Globe: ${data.length} grafites encontrados, criando clusters...`);
+
+          const geojson = toGeoJSON(data);
+
+          // Se source já existe, atualiza os dados
+          if (map.getSource('graffitis')) {
+            (map.getSource('graffitis') as mapboxgl.GeoJSONSource).setData(geojson);
+            return;
+          }
+
+          // Adicionar source com clustering nativo
+          map.addSource('graffitis', {
+            type: 'geojson',
+            data: geojson,
+            cluster: true,
+            clusterMaxZoom: 14,
+            clusterRadius: 50,
+          });
+
+          // --- Layer 1: Clusters (círculos com tamanho proporcional) ---
+          map.addLayer({
+            id: 'clusters',
+            type: 'circle',
+            source: 'graffitis',
+            filter: ['has', 'point_count'],
+            paint: {
+              // Tamanho proporcional ao número de pontos
+              'circle-radius': [
+                'step',
+                ['get', 'point_count'],
+                18,   // base: até 10 pontos
+                10, 24,  // 10-49 pontos
+                50, 32,  // 50-99 pontos
+                100, 42  // 100+ pontos
+              ],
+              // Gradiente de cor: azul → laranja → vermelho → roxo
+              'circle-color': [
+                'step',
+                ['get', 'point_count'],
+                '#FF6321',  // base: laranja (poucos)
+                10, '#FF4500',  // médio: laranja intenso
+                50, '#FF2200',  // muitos: vermelho
+                100, '#A855F7'  // massivo: roxo legendary
+              ],
+              'circle-opacity': 0.85,
+              'circle-stroke-width': 2,
+              'circle-stroke-color': 'rgba(255, 255, 255, 0.6)',
+              // Glow: sombra grande para efeito neon
+              'circle-blur': 0.15,
+            },
+          });
+
+          // --- Layer 2: Contador de grafites no cluster ---
+          map.addLayer({
+            id: 'cluster-count',
+            type: 'symbol',
+            source: 'graffitis',
+            filter: ['has', 'point_count'],
+            layout: {
+              'text-field': ['get', 'point_count_abbreviated'],
+              'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+              'text-size': 13,
+              'text-allow-overlap': true,
+            },
+            paint: {
+              'text-color': '#FFFFFF',
+            },
+          });
+
+          // --- Layer 3: Pontos individuais (unclustered) ---
+          map.addLayer({
+            id: 'unclustered-point',
+            type: 'circle',
+            source: 'graffitis',
+            filter: ['!', ['has', 'point_count']],
+            paint: {
+              // Cor baseada no tier
+              'circle-color': [
+                'match',
+                ['get', 'tier'],
+                'legendary', '#A855F7',
+                'gold', '#EAB308',
+                'silver', '#94A3B8',
+                '#FF6321' // default: bronze/orange
+              ],
+              'circle-radius': 8,
+              'circle-stroke-width': 3,
+              'circle-stroke-color': '#FFFFFF',
+              'circle-opacity': 0.95,
+            },
+          });
+
+          // --- Interações ---
+
+          // Click num cluster → expand (zoom ao nível de expansão)
+          map.on('click', 'clusters', (e) => {
+            const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+            if (!features.length) return;
+            const clusterId = features[0].properties!.cluster_id;
+            const source = map.getSource('graffitis') as mapboxgl.GeoJSONSource;
+
+            source.getClusterExpansionZoom(clusterId, (err, zoom) => {
+              if (err) return;
+              const geom = features[0].geometry as GeoJSON.Point;
+              stopSpinning();
+              map.flyTo({
+                center: geom.coordinates as [number, number],
+                zoom: zoom!,
+                speed: 1.5,
+                essential: true,
+              });
+            });
+          });
+
+          // Click num ponto individual → navegar pro StreetExplorer
+          map.on('click', 'unclustered-point', (e) => {
+            if (!e.features || e.features.length === 0) return;
+            const feature = e.features[0];
+            const geom = feature.geometry as GeoJSON.Point;
+            const props = feature.properties!;
+            stopSpinning();
+            stepZoom(
+              geom.coordinates[1],
+              geom.coordinates[0],
+              `Aterrissando em ${props.title || 'Grafite'}...`,
+              18,
+              true,
+              props.address || 'Street View'
+            );
+          });
+
+          // Hover: cursor pointer nos clusters e pontos
+          map.on('mouseenter', 'clusters', () => {
+            map.getCanvas().style.cursor = 'pointer';
+          });
+          map.on('mouseleave', 'clusters', () => {
+            map.getCanvas().style.cursor = '';
+          });
+          map.on('mouseenter', 'unclustered-point', () => {
+            map.getCanvas().style.cursor = 'pointer';
+          });
+          map.on('mouseleave', 'unclustered-point', () => {
+            map.getCanvas().style.cursor = '';
+          });
+
+          // Tooltip: hover num cluster
+          const popup = new mapboxgl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            className: 'graffiti-popup',
+            maxWidth: '200px',
+          });
+
+          map.on('mouseenter', 'clusters', (e) => {
+            if (!e.features || e.features.length === 0) return;
+            const feature = e.features[0];
+            const geom = feature.geometry as GeoJSON.Point;
+            const count = feature.properties!.point_count;
+
+            popup
+              .setLngLat(geom.coordinates as [number, number])
+              .setHTML(`
+                <div style="background:#111;color:white;padding:8px 12px;border-radius:8px;font-size:12px;font-family:monospace;border:1px solid rgba(255,99,33,0.3);">
+                  <strong style="color:#FF6321;">${count}</strong> grafites nesta região
+                </div>
+              `)
+              .addTo(map);
+          });
+
+          map.on('mouseleave', 'clusters', () => {
+            popup.remove();
+          });
+
+          // Tooltip: hover num ponto individual
+          map.on('mouseenter', 'unclustered-point', (e) => {
+            if (!e.features || e.features.length === 0) return;
+            const feature = e.features[0];
+            const geom = feature.geometry as GeoJSON.Point;
+            const props = feature.properties!;
+
+            const tierColors: Record<string, string> = {
+              legendary: '#A855F7',
+              gold: '#EAB308',
+              silver: '#94A3B8',
+              bronze: '#FF6321',
+            };
+            const tierColor = tierColors[props.tier] || tierColors.bronze;
+
+            popup
+              .setLngLat(geom.coordinates as [number, number])
+              .setHTML(`
+                <div style="background:#111;color:white;padding:8px 12px;border-radius:8px;font-size:12px;font-family:monospace;border:1px solid ${tierColor}40;max-width:200px;">
+                  <div style="font-weight:bold;margin-bottom:4px;color:${tierColor};">${props.title}</div>
+                  <div style="color:#888;font-size:10px;text-transform:uppercase;">${props.tier || 'bronze'} tier</div>
+                </div>
+              `)
+              .addTo(map);
+          });
+
+          map.on('mouseleave', 'unclustered-point', () => {
+            popup.remove();
+          });
+
+          console.log(`🗺️ Globe: Cluster layers criados com sucesso`);
+        } catch (err) {
+          console.error('🗺️ Globe: Error:', err);
+        }
+      };
+
+      loadGraffitiClusters();
+
+      // Realtime sync
+      realtimeChannelRef.current = supabase
+        .channel('globe-graffiti-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'graffitis' }, () => {
+          loadGraffitiClusters();
+        })
+        .subscribe();
+    });
 
     map.on('mousedown', stopSpinning);
     map.on('dragstart', stopSpinning);
@@ -253,9 +371,9 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
     
     // Allow clicking map directly to zoom to that country/location
     map.on('click', async (e) => {
-      if (isFlying.current) return; // Previne clique durante voo
+      if (isFlying.current) return;
 
-      // Skip if click was on a graffiti cluster or point
+      // Ignorar clicks que já foram tratados por layers
       const clusterFeatures = map.queryRenderedFeatures(e.point, { layers: ['clusters', 'unclustered-point'] });
       if (clusterFeatures.length > 0) return;
 
@@ -295,7 +413,7 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
              nextZoom = 18;
              targetName = addr.road || addr.pedestrian || "Rua";
              actionMsg = `Aterrissando em ${targetName}...`;
-             willInvokeExplorer = true; // The final step!
+             willInvokeExplorer = true;
         }
         
         stepZoom(lat, lng, actionMsg, nextZoom, willInvokeExplorer, data?.display_name || targetName);
@@ -318,8 +436,7 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
         mapRef.current = null;
       }
     };
-  }, [stepZoom, isRotating]);
-  }, [stepZoom, isRotating]);
+  }, [stepZoom]);
   
   // Re-start or stop spinning when state changes manually
   useEffect(() => {
@@ -341,7 +458,7 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
     if (isRotating) {
       spinGlobe();
     } else {
-      if (animationId) cancelAnimationFrame(animationId);
+      if (animationId!) cancelAnimationFrame(animationId!);
     }
     
     return () => {
@@ -362,7 +479,6 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
         const { lat, lon, display_name } = data[0];
         const latitude = parseFloat(lat);
         const longitude = parseFloat(lon);
-        // O search leva direto para o Street!
         stepZoom(latitude, longitude, `Aterrissando no Destino...`, 18, true, display_name);
       }
     } catch (error) {

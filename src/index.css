@@ -39,6 +39,68 @@ body {
   animation: marquee 30s linear infinite;
 }
 
+/* Animação: Pulso para clusters do Globo */
+@keyframes graffiti-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+  50% { transform: translate(-50%, -50%) scale(1.4); opacity: 0.1; }
+}
+
+/* Animação: Spray Reveal (descoberta de grafite no AR) */
+@keyframes spray-reveal {
+  0% { clip-path: circle(0% at 50% 50%); filter: blur(20px) saturate(0); opacity: 0; }
+  40% { filter: blur(8px) saturate(0.5); opacity: 0.6; }
+  100% { clip-path: circle(75% at 50% 50%); filter: blur(0px) saturate(0.85); opacity: 1; }
+}
+
+.animate-spray-reveal {
+  animation: spray-reveal 1.2s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+/* Animação: Badge de descoberta */
+@keyframes discovery-badge {
+  0% { transform: translateX(-50%) translateY(-10px) scale(0.8); opacity: 0; }
+  15% { transform: translateX(-50%) translateY(0) scale(1.1); opacity: 1; }
+  85% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateX(-50%) translateY(-10px) scale(0.8); opacity: 0; }
+}
+
+.animate-discovery-badge {
+  animation: discovery-badge 2.5s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+/* Animação: Heart Burst (like) */
+@keyframes heart-burst {
+  0% { transform: scale(1); }
+  15% { transform: scale(1.4); }
+  30% { transform: scale(0.9); }
+  45% { transform: scale(1.2); }
+  60% { transform: scale(1); }
+}
+
+.animate-heart-burst {
+  animation: heart-burst 0.6s ease-in-out;
+}
+
+/* Animação: Seta direcional da bússola AR */
+@keyframes compass-glow {
+  0%, 100% { filter: drop-shadow(0 0 4px currentColor); }
+  50% { filter: drop-shadow(0 0 12px currentColor); }
+}
+
+.animate-compass-glow {
+  animation: compass-glow 2s ease-in-out infinite;
+}
+
+/* Animação: Fade-in scale para modal */
+@keyframes modal-enter {
+  0% { transform: scale(0.92); opacity: 0; filter: blur(8px); }
+  100% { transform: scale(1); opacity: 1; filter: blur(0px); }
+}
+
+.animate-modal-enter {
+  animation: modal-enter 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 4px;
