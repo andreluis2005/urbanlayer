@@ -296,7 +296,7 @@ const GraffitiOverlay: React.FC<GraffitiOverlayProps> = React.memo(function Graf
 
   return (
     <div
-      className="absolute inset-0 z-[5] overflow-hidden"
+      className="absolute inset-0 z-[5] pointer-events-none overflow-hidden"
       aria-hidden="true"
     >
       {visibleOverlays.map(overlay => (
