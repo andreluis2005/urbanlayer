@@ -103,9 +103,19 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
         // Limpeza de segurança: evitar duplicidade de elementos no DOM do React
         mapRef.current.innerHTML = '';
         
-        const panorama = new StreetViewPanorama(mapRef.current, {
-          position: { lat: location.lat, lng: location.lng },
-          pov: { heading: 0, pitch: 0 },
+        let initialPov = { heading: 0, pitch: 0 };
+        let initialLocation = { lat: location.lat, lng: location.lng };
+        let panoId = undefined;
+
+        if (discoveredGraffiti) {
+          if (discoveredGraffiti.heading != null) initialPov.heading = discoveredGraffiti.heading;
+          if (discoveredGraffiti.pitch != null) initialPov.pitch = discoveredGraffiti.pitch;
+          if (discoveredGraffiti.pano_id) panoId = discoveredGraffiti.pano_id;
+          initialLocation = { lat: discoveredGraffiti.lat, lng: discoveredGraffiti.lng };
+        }
+
+        const options: google.maps.StreetViewPanoramaOptions = {
+          pov: initialPov,
           zoom: 1,
           showRoadLabels: false,
           disableDefaultUI: true,
@@ -113,7 +123,15 @@ const StreetExplorer: React.FC<StreetExplorerProps> = ({ location, onSelectSpot,
           panControl: true,
           linksControl: true,
           enableCloseButton: false,
-        });
+        };
+
+        if (panoId) {
+          options.pano = panoId;
+        } else {
+          options.position = initialLocation;
+        }
+
+        const panorama = new StreetViewPanorama(mapRef.current, options);
 
         panoramaRef.current = panorama;
 

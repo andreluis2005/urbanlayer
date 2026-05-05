@@ -8,7 +8,7 @@ import { Search, Loader2, Globe as GlobeIcon } from 'lucide-react';
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || '';
 
 interface GlobeProps {
-  onSelectLocation: (lat: number, lng: number, name: string) => void;
+  onSelectLocation: (lat: number, lng: number, name: string, graffitiId?: string) => void;
 }
 
 /**
@@ -48,7 +48,7 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
   const isRotatingRef = useRef(isRotating);
   isRotatingRef.current = isRotating;
 
-  const stepZoom = useCallback((lat: number, lng: number, message: string, targetZoom: number, triggerExplorer: boolean, fullLocationName: string) => {
+  const stepZoom = useCallback((lat: number, lng: number, message: string, targetZoom: number, triggerExplorer: boolean, fullLocationName: string, graffitiId?: string) => {
     const map = mapRef.current;
     if (!map) return;
     
@@ -72,7 +72,7 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
       
       if (triggerExplorer) {
         setTimeout(() => {
-          onSelectLocation(lat, lng, fullLocationName);
+          onSelectLocation(lat, lng, fullLocationName, graffitiId);
         }, 800);
       } else {
          setTransitionText(""); // Apaga o overlay após aterrarem e deixa explorar
@@ -272,7 +272,8 @@ const Globe: React.FC<GlobeProps> = ({ onSelectLocation }) => {
               `Aterrissando em ${props.title || 'Grafite'}...`,
               18,
               true,
-              props.address || 'Street View'
+              props.address || 'Street View',
+              props.id
             );
           });
 

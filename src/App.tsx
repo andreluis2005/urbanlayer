@@ -46,10 +46,25 @@ function AppContent() {
     loadArt();
   }, [params]);
 
-  const handleSelectLocation = (lat: number, lng: number, name: string) => {
+  const handleSelectLocation = (lat: number, lng: number, name: string, graffitiId?: string) => {
     setSelectedLocation({ lat, lng, name });
     setCurrentView('explorer');
     navigate(`/explore/${lat.toFixed(6)}/${lng.toFixed(6)}`);
+    
+    // Se viemos do clique num grafite no Globo, vamos carregá-lo para ativar o modal AR e ir pro lugar certo!
+    if (graffitiId) {
+      const loadArt = async () => {
+        const { data } = await supabase
+          .from('graffitis')
+          .select('*')
+          .eq('id', graffitiId)
+          .single();
+        if (data) {
+          setDiscoveredGraffiti(data as Graffiti);
+        }
+      };
+      loadArt();
+    }
   };
 
   const handleSelectSpot = (wallImage: string, exactLat: number, exactLng: number, heading?: number, pitch?: number, panoId?: string) => {
